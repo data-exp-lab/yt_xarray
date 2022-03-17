@@ -102,8 +102,8 @@ class YtAccessor:
     @property
     def ds(self):
         # an in-memory yt dataset, produced from `ds.yt.load_uniform_grid()` with
-        # default values. Call `load_uniform_grid()` directly to modify behavior.
-        return self.load_uniform_grid()
+        # all fields. Call `load_uniform_grid()` directly to modify behavior.
+        return self.load_uniform_grid(self.field_list)
 
     @property
     def _coord_list(self):
@@ -116,12 +116,12 @@ class YtAccessor:
         # a list of variables that are not coordinates
         return [i for i in self._obj.variables if i not in self._obj.coords]
 
-    def _get_field_coord_list(self, field: str) -> List[str]:
+    def _get_field_coord_tuple(self, field: str) -> Tuple[str]:
         # return the ordered coordinate names for a field
-        return list(self._obj[field].coords)
+        return tuple(self._obj[field].coords)
 
     def get_field_coords(self, field: str):
-        field_coords = self._get_field_coord_list(field)
+        field_coords = self._get_field_coord_tuple(field)
         c0 = self._obj[field_coords[0]].values
         c1 = self._obj[field_coords[1]].values
         c2 = self._obj[field_coords[2]].values
@@ -161,11 +161,15 @@ class YtAccessor:
         self._bbox[field] = bbox
         return bbox
 
-    def get_single_bbox(self, fields: List[str]):
+    def get_single_bbox(self, fields: List[str]) -> np.ndarray:
+        # return the bounding box for a set of fields. Will return a single
+        # bounding box if all fields share a bounding box, otherwise will
+        # error.
 
+        # assemble the set of coordinates. easi
         coord_sets = set()
         for field in fields:
-            coord_sets.update(self._get_field_coord_list(field))
+            coord_sets.add(self._get_field_coord_tuple(field))
 
         if len(coord_sets) > 1:
             msg = (
@@ -174,7 +178,7 @@ class YtAccessor:
             )
             raise RuntimeError(msg)
 
-        return self.get_single_bbox(fields[0])
+        return self.get_bbox(fields[0])
 
 
 def _determine_yt_geomtype(coord_type: str, coord_list: List[str]) -> Optional[str]:
