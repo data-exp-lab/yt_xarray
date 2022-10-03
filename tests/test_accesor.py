@@ -126,7 +126,7 @@ def test_load_uniform_grid():
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
 
-pytest.mark.skipif(yt.__version__.startswith("4.1") is False, reason="requires yt>=4.1.0")
+@pytest.mark.skipif(yt.__version__.startswith("4.1") is False, reason="requires yt>=4.1.0")
 def test_load_grid_from_callable():
     tfield = "a_new_field"
     n_x = 3
