@@ -2,7 +2,8 @@ import numpy as np
 
 import yt_xarray  # noqa: F401
 from yt_xarray._utilities import construct_minimal_ds
-
+import yt
+import pytest
 
 def test_accessor():
 
@@ -123,3 +124,29 @@ def test_load_uniform_grid():
     ds_yt = ds.yt.load_uniform_grid(flds, length_unit="km")
     assert ds_yt.coordinates.name == "cartesian"
     assert all([f in expected_field_list] for f in ds_yt.field_list)
+
+
+pytest.mark.skipif(yt.__version__.startswith("4.1") is False, reason="requires yt>=4.1.0")
+def test_load_grid_from_callable():
+    tfield = "a_new_field"
+    n_x = 3
+    n_y = 4
+    n_z = 5
+    ds_xr = construct_minimal_ds(
+        field_name=tfield,
+        n_fields=3,
+        n_x=n_x,
+        n_y=n_y,
+        n_z=n_z,
+        z_name="depth",
+        coord_order=["z", "y", "x"],
+    )
+
+    flds = [tfield + "_0", tfield + "_1"]
+
+    ds = ds_xr.yt.load_grid_from_callable()
+    for fld in flds:
+        assert ("stream", fld) in ds.field_list
+
+    f = ds.all_data()[flds[0]]
+    assert len(f) == n_x * n_y * n_z

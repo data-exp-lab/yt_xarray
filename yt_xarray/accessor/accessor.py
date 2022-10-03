@@ -15,6 +15,35 @@ class YtAccessor:
         self._bbox = {}
         self._field_grids = defaultdict(lambda: None)
 
+    def load_grid_from_callable(self):
+
+        def _read_data(handle):
+            def _reader(grid, field_name):
+                ftype, fname = field_name
+                si = grid.get_global_startindex()
+                ei = si + grid.ActiveDimensions
+                var = getattr(handle, fname)  # variables are top-level attrs of xr datasets
+                data = var[si[0]: ei[0], si[1]: ei[1], si[2]: ei[2]]
+                return data.values
+
+            return _reader
+
+        reader = _read_data(self._obj)
+
+        fields = list(self._obj.data_vars)
+        shape = self._obj.data_vars[fields[0]].shape
+
+        # again, need to account for stretched grid here...
+        data = {_: reader for _ in fields}
+        data.update({"left_edge": [0., 0., 0.],
+                     "right_edge": [1., 1., 1.],
+                     "dimensions": shape,
+                     "level": 0})
+
+        grid_data = [data, ]
+
+        return yt.load_amr_grids(grid_data, shape)
+
     def load_uniform_grid(
         self, fields: List[str], *args, geometry: Optional[str] = None, **kwargs
     ):
@@ -59,6 +88,9 @@ class YtAccessor:
         coord_list = self._get_yt_coordlist()
         geom = (geomtype, coord_list)
         bbox_vals = self.get_single_bbox(fields)  # will validate field bboxes
+
+        # should account for stretched grid here!
+
 
         data = {field: self._obj[field].values for field in fields}
         sizes = data[list(data.keys())[0]].shape
