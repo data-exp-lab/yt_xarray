@@ -38,7 +38,7 @@ jobs:
       id: black
       run: |
         black --version
-        black --check --diff yt_idv/
+        black --check --diff yt_xarray/
 
   isort:
     name: isort
