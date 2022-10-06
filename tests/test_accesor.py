@@ -93,7 +93,7 @@ def test_load_uniform_grid():
     expected_field_list = [("stream", f) for f in flds]
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
-    ds_yt = ds.yt.ds()  # should generate a ds with all fields
+    ds_yt = ds.yt.load_uniform_grid()  # should generate a ds with all fields
     flds = [tfield + "_0", tfield + "_1", tfield + "_2"]
     expected_field_list = [("stream", f) for f in flds]
     assert all([f in expected_field_list] for f in ds_yt.field_list)
@@ -107,7 +107,7 @@ def test_load_uniform_grid():
         z_name="altitude",
         coord_order=["z", "y", "x"],
     )
-    ds_yt = ds.yt.ds()
+    ds_yt = ds.yt.load_uniform_grid()
     assert ds_yt.coordinates.name == "geographic"
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
@@ -153,3 +153,23 @@ def test_load_grid_from_callable():
 
     f = ds.all_data()[flds[0]]
     assert len(f) == n_x * n_y * n_z
+
+
+def test_yt_ds_attr():
+    tfield = "a_new_field"
+    n_x = 3
+    n_y = 4
+    n_z = 5
+    ds_xr = construct_minimal_ds(
+        field_name=tfield,
+        n_fields=3,
+        n_x=n_x,
+        n_y=n_y,
+        n_z=n_z,
+        z_name="depth",
+        coord_order=["z", "y", "x"],
+    )
+
+    ds = ds_xr.yt.ds()  # alias to load_grid_from_callable but good to check
+    for fld in list(ds_xr.data_vars):
+        assert ("stream", fld) in ds.field_list
