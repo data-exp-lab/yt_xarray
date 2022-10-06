@@ -15,10 +15,15 @@ class YtAccessor:
         self._bbox = {}
         self._field_grids = defaultdict(lambda: None)
 
-    def load_grid_from_callable(
-        self, fields: Optional[List[str]] = None, geometry=None, **kwargs
+    def _load_uniform_grid(
+        self,
+        *args,
+        fields: Optional[List[str]] = None,
+        geometry=None,
+        use_callable=True,
+        **kwargs,
     ):
-        print("loading uniform grid from callable")
+
         if geometry is None:
             geomtype = _determine_yt_geomtype(self.coord_type, self._coord_list)
             if geomtype is None:
@@ -27,18 +32,6 @@ class YtAccessor:
                     "geometry = 'geographic' or 'internal_geopgraphic'"
                 )
 
-        def _read_data(handle):
-            def _reader(grid, field_name):
-                ftype, fname = field_name
-                si = grid.get_global_startindex()
-                ei = si + grid.ActiveDimensions
-                var = getattr(handle, fname)
-                data = var[si[0] : ei[0], si[1] : ei[1], si[2] : ei[2]]
-                return data.values
-
-            return _reader
-
-        reader = _read_data(self._obj)
         if fields is None:
             fields = list(self._obj.data_vars)
 
@@ -54,32 +47,14 @@ class YtAccessor:
                 )
                 raise NotImplementedError(msg)
 
-        # again, need to possibly account for stretched grid here... or at
-        # least check for it and raise a warning...
+        # need to possibly account for stretched grid here... or at
+        # least check for it and raise an error...
 
         # single grid, use whole domain for L/R edges
         bbox_vals = self.get_single_bbox(fields)
         l_e = bbox_vals[:, 0]
         r_e = bbox_vals[:, 1]
 
-        data = {}
-        for field in fields:
-            units = getattr(self._obj.data_vars[field], "units", None) or ""
-            data[field] = (reader, units)
-
-        data.update(
-            {
-                "left_edge": l_e,
-                "right_edge": r_e,
-                "dimensions": shape,
-                "level": 0,
-            }
-        )
-
-        grid_data = [
-            data,
-        ]
-
         if "length_unit" in kwargs:
             length_unit = kwargs.pop("length_unit")
         else:
@@ -92,59 +67,108 @@ class YtAccessor:
 
         coord_list = self._get_yt_coordlist()
         geom = (geomtype, coord_list)
+        if use_callable:
 
-        return yt.load_amr_grids(
-            grid_data, shape, geometry=geom, bbox=bbox_vals, length_unit=length_unit
-        )
+            def _read_data(handle):
+                def _reader(grid, field_name):
+                    ftype, fname = field_name
+                    si = grid.get_global_startindex()
+                    ei = si + grid.ActiveDimensions
+                    var = getattr(handle, fname)
+                    data = var[si[0] : ei[0], si[1] : ei[1], si[2] : ei[2]]
+                    return data.values
 
-    def load_uniform_grid(
-        self, fields: List[str], *args, geometry: Optional[str] = None, **kwargs
+                return _reader
+
+            reader = _read_data(self._obj)
+
+            data = {}
+            for field in fields:
+                units = getattr(self._obj.data_vars[field], "units", None) or ""
+                data[field] = (reader, units)
+
+            data.update(
+                {
+                    "left_edge": l_e,
+                    "right_edge": r_e,
+                    "dimensions": shape,
+                    "level": 0,
+                }
+            )
+
+            grid_data = [
+                data,
+            ]
+
+            return yt.load_amr_grids(
+                grid_data,
+                shape,
+                geometry=geom,
+                bbox=bbox_vals,
+                length_unit=length_unit,
+                **kwargs,
+            )
+
+        else:
+            # should account for stretched grid here!
+            data = {field: self._obj[field].values for field in fields}
+            return yt.load_uniform_grid(
+                data,
+                shape,
+                length_unit=length_unit,
+                bbox=bbox_vals,
+                geometry=geom,
+                **kwargs,
+            )
+
+    def load_grid_from_callable(
+        self, fields: Optional[List[str]] = None, geometry=None, **kwargs
     ):
         """
-        return an in-memory uniform grid yt dataset
+        returns a uniform grid yt dataset linked to the open xarray handle.
 
         Parameters
         ----------
-        fields : list of fields to include
-        args : any additional positional arguments to pass to yt.load_uniform_grid
+        fields : list of fields to include. If None, will try to use all fields
         geometry : the geometry to pass to yt.load_uniform grid. If not provided,
                    will attempt to infer.
         kwargs : any additional keyword arguments to pass to yt.load_uniform_grid
 
         Returns
         -------
-        result of yt.load_uniform_grid()
+        yt StreamDataset
 
+        Notes
+        -----
+
+        This function relies on the stream callable functionality in yt>=4.1.0
+        in order to read directly from an open xarray handle without creating
+        additional in-memory copies of the data.
         """
-        print("loading uniform grid")
-        if geometry is None:
-            geomtype = _determine_yt_geomtype(self.coord_type, self._coord_list)
-            if geomtype is None:
-                raise ValueError(
-                    "Cannot determine yt geometry type, please provide"
-                    "geometry = 'geographic' or 'internal_geopgraphic'"
-                )
+        return self._load_uniform_grid(fields=fields, geometry=geometry, **kwargs)
 
-        if "length_unit" in kwargs:
-            length_unit = kwargs.pop("length_unit")
-        else:
-            length_unit = self._infer_length_unit()
-            if length_unit is None:
-                raise ValueError(
-                    "cannot determine length_unit, please provide as"
-                    "a keyword argument."
-                )
+    def load_uniform_grid(
+        self,
+        fields: Optional[List[str]] = None,
+        geometry: Optional[str] = None,
+        **kwargs,
+    ):
+        """
+        return an in-memory uniform grid yt dataset
 
-        coord_list = self._get_yt_coordlist()
-        geom = (geomtype, coord_list)
-        bbox_vals = self.get_single_bbox(fields)  # will validate field bboxes
+        Parameters
+        ----------
+        fields : list of fields to include. If None, will try to use all fields
+        geometry : the geometry to pass to yt.load_uniform grid. If not provided,
+                   will attempt to infer.
+        kwargs : any additional keyword arguments to pass to yt.load_uniform_grid
 
-        # should account for stretched grid here!
-
-        data = {field: self._obj[field].values for field in fields}
-        sizes = data[list(data.keys())[0]].shape
-        return yt.load_uniform_grid(
-            data, sizes, length_unit, *args, bbox=bbox_vals, geometry=geom, **kwargs
+        Returns
+        -------
+        yt StreamDataset
+        """
+        return self._load_uniform_grid(
+            fields=fields, geometry=geometry, use_callable=False, **kwargs
         )
 
     def _infer_length_unit(self):
