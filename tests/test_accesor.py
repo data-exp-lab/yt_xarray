@@ -1,9 +1,10 @@
 import numpy as np
+import pytest
+import yt
 
 import yt_xarray  # noqa: F401
 from yt_xarray._utilities import construct_minimal_ds
-import yt
-import pytest
+
 
 def test_accessor():
 
@@ -92,7 +93,7 @@ def test_load_uniform_grid():
     expected_field_list = [("stream", f) for f in flds]
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
-    ds_yt = ds.yt.ds  # should generate a ds with all fields
+    ds_yt = ds.yt.ds()  # should generate a ds with all fields
     flds = [tfield + "_0", tfield + "_1", tfield + "_2"]
     expected_field_list = [("stream", f) for f in flds]
     assert all([f in expected_field_list] for f in ds_yt.field_list)
@@ -106,7 +107,7 @@ def test_load_uniform_grid():
         z_name="altitude",
         coord_order=["z", "y", "x"],
     )
-    ds_yt = ds.yt.ds
+    ds_yt = ds.yt.ds()
     assert ds_yt.coordinates.name == "geographic"
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
@@ -126,7 +127,9 @@ def test_load_uniform_grid():
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
 
-@pytest.mark.skipif(yt.__version__.startswith("4.1") is False, reason="requires yt>=4.1.0")
+@pytest.mark.skipif(
+    yt.__version__.startswith("4.1") is False, reason="requires yt>=4.1.0"
+)
 def test_load_grid_from_callable():
     tfield = "a_new_field"
     n_x = 3

@@ -15,31 +15,62 @@ class YtAccessor:
         self._bbox = {}
         self._field_grids = defaultdict(lambda: None)
 
-    def load_grid_from_callable(self):
+    def load_grid_from_callable(
+        self, fields: Optional[List[str]] = None, geometry=None, **kwargs
+    ):
+        print("loading uniform grid from callable")
+        if geometry is None:
+            geomtype = _determine_yt_geomtype(self.coord_type, self._coord_list)
+            if geomtype is None:
+                raise ValueError(
+                    "Cannot determine yt geometry type, please provide"
+                    "geometry = 'geographic' or 'internal_geopgraphic'"
+                )
+
         def _read_data(handle):
             def _reader(grid, field_name):
                 ftype, fname = field_name
                 si = grid.get_global_startindex()
                 ei = si + grid.ActiveDimensions
-                var = getattr(
-                    handle, fname
-                )  # variables are top-level attrs of xr datasets
+                var = getattr(handle, fname)
                 data = var[si[0] : ei[0], si[1] : ei[1], si[2] : ei[2]]
                 return data.values
 
             return _reader
 
         reader = _read_data(self._obj)
+        if fields is None:
+            fields = list(self._obj.data_vars)
 
-        fields = list(self._obj.data_vars)
         shape = self._obj.data_vars[fields[0]].shape
+        for f in fields:
+            if self._obj.data_vars[f].shape != shape:
+                msg = "Provided fields must have the same shape."
+                raise RuntimeError(msg)
+            if self._obj.data_vars[f].ndim != 3:
+                msg = (
+                    f"Only 3D fields are supported at present and "
+                    f"{f}.ndim={self._obj.data_vars[f].ndim}."
+                )
+                raise NotImplementedError(msg)
 
-        # again, need to account for stretched grid here...
-        data = {_: reader for _ in fields}
+        # again, need to possibly account for stretched grid here... or at
+        # least check for it and raise a warning...
+
+        # single grid, use whole domain for L/R edges
+        bbox_vals = self.get_single_bbox(fields)
+        l_e = bbox_vals[:, 0]
+        r_e = bbox_vals[:, 1]
+
+        data = {}
+        for field in fields:
+            units = getattr(self._obj.data_vars[field], "units", None) or ""
+            data[field] = (reader, units)
+
         data.update(
             {
-                "left_edge": [0.0, 0.0, 0.0],
-                "right_edge": [1.0, 1.0, 1.0],
+                "left_edge": l_e,
+                "right_edge": r_e,
                 "dimensions": shape,
                 "level": 0,
             }
@@ -49,7 +80,22 @@ class YtAccessor:
             data,
         ]
 
-        return yt.load_amr_grids(grid_data, shape)
+        if "length_unit" in kwargs:
+            length_unit = kwargs.pop("length_unit")
+        else:
+            length_unit = self._infer_length_unit()
+            if length_unit is None:
+                raise ValueError(
+                    "cannot determine length_unit, please provide as"
+                    "a keyword argument."
+                )
+
+        coord_list = self._get_yt_coordlist()
+        geom = (geomtype, coord_list)
+
+        return yt.load_amr_grids(
+            grid_data, shape, geometry=geom, bbox=bbox_vals, length_unit=length_unit
+        )
 
     def load_uniform_grid(
         self, fields: List[str], *args, geometry: Optional[str] = None, **kwargs
@@ -70,6 +116,7 @@ class YtAccessor:
         result of yt.load_uniform_grid()
 
         """
+        print("loading uniform grid")
         if geometry is None:
             geomtype = _determine_yt_geomtype(self.coord_type, self._coord_list)
             if geomtype is None:
@@ -81,12 +128,8 @@ class YtAccessor:
         if "length_unit" in kwargs:
             length_unit = kwargs.pop("length_unit")
         else:
-            if self.coord_type == "geodetic":
-                length_unit = 1
-            elif hasattr(self, "geospatial_vertical_units"):
-                # some netcdf conventions have this!
-                length_unit = self.geospatial_vertical_units
-            else:
+            length_unit = self._infer_length_unit()
+            if length_unit is None:
                 raise ValueError(
                     "cannot determine length_unit, please provide as"
                     "a keyword argument."
@@ -103,6 +146,14 @@ class YtAccessor:
         return yt.load_uniform_grid(
             data, sizes, length_unit, *args, bbox=bbox_vals, geometry=geom, **kwargs
         )
+
+    def _infer_length_unit(self):
+        if self.coord_type == "geodetic":
+            return 1
+        elif hasattr(self._obj, "geospatial_vertical_units"):
+            # some netcdf conventions have this!
+            return self._obj.geospatial_vertical_units
+        return None
 
     def _get_yt_coordlist(self) -> Tuple[str]:
         # yt expects certain coordinate names, need a way to handle those.
@@ -137,11 +188,9 @@ class YtAccessor:
         )
         return ctype
 
-    @property
     def ds(self):
-        # an in-memory yt dataset, produced from `ds.yt.load_uniform_grid()` with
-        # all fields. Call `load_uniform_grid()` directly to modify behavior.
-        return self.load_uniform_grid(self.field_list)
+        """try to return a yt dataset with all data fields"""
+        return self.load_grid_from_callable()
 
     @property
     def _coord_list(self):
@@ -204,7 +253,7 @@ class YtAccessor:
         # bounding box if all fields share a bounding box, otherwise will
         # error.
 
-        # assemble the set of coordinates. easi
+        # assemble the set of coordinates
         coord_sets = set()
         for field in fields:
             coord_sets.add(self._get_field_coord_tuple(field))
