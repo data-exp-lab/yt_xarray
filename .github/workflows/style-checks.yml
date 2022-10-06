@@ -57,7 +57,7 @@ jobs:
       id: isort
       run: |
         isort --version-number
-        isort . --check --diff
+        isort yt_xarray --check --diff
 
   flynt:
     name: flynt
