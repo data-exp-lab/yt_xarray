@@ -9,4 +9,3 @@ __version__ = "0.1.0"
 # their respective codes
 
 from yt_xarray.accessor import YtAccessor
-from yt_xarray.frontend import yt_xarrayDataset
