@@ -4,13 +4,6 @@
 
 from setuptools import find_packages, setup
 
-with open("README.rst") as readme_file:
-    readme = readme_file.read()
-
-with open("HISTORY.rst") as history_file:
-    history = history_file.read()
-
-
 with open("requirements.txt") as reqs_file:
     requirements = reqs_file.read().strip().split("\n")
 
@@ -33,10 +26,10 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
     ],
-    description="interfaces between yt and xarray",
+    description="interface between yt and xarray",
     install_requires=requirements,
     license="MIT license",
-    long_description=readme + "\n\n" + history,
+    long_description="tools for connecting yt and xarray",
     include_package_data=True,
     keywords="yt_xarray",
     name="yt_xarray",
