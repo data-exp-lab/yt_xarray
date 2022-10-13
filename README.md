@@ -10,7 +10,7 @@ interfaces between yt and xarray
 ## Features
 
 This is an experimental package for improving the exhange of data between yt
-and xarray. The primary access point is the yt accessor object for xarray. To
+and xarray. The primary access point is the `YtAccessor` object for xarray. To
 use it, simply import the package and the `.yt` object will be available to
 xarray datasets. For example, to convert the xarray dataset into a full-fledged
 yt dataset:
