@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import xarray as xr
@@ -20,8 +20,11 @@ def construct_minimal_ds(
     z_units: str = "km",
     field_name: str = "test_field",
     n_fields: int = 1,
-    coord_order: Tuple[str, str, str] = ["z", "y", "x"],
+    coord_order: Optional[Tuple[str, str, str]] = None,
 ) -> xr.Dataset:
+
+    if coord_order is None:
+        coord_order = ("z", "y", "x")
 
     # contruct and return a minimal xarray dataset to use in tests as needed
 

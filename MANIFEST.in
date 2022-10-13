@@ -3,9 +3,13 @@ include CONTRIBUTING.rst
 include HISTORY.rst
 include LICENSE
 include README.rst
-
+include *.txt
+include *.yaml
+include Makefile
+include tox.ini
 recursive-include tests *
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
+exclude .editorconfig
 
 recursive-include docs *.rst conf.py Makefile make.bat *.jpg *.png *.gif
