@@ -1,8 +1,7 @@
-include AUTHORS.rst
-include CONTRIBUTING.rst
-include HISTORY.rst
+include *.md
+recursive-include examples *.ipynb
+recursive-exclude examples .ipynb_checkpoints *.ipynb
 include LICENSE
-include README.rst
 include *.txt
 include *.yaml
 include Makefile
