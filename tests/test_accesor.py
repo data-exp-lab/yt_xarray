@@ -74,16 +74,11 @@ def test_bbox():
     )
 
     # normal bbox should return the input ranges
-    bbox = ds.yt.get_bbox("test_field_0")
+    bbox, _, _, _ = ds.yt.get_bbox("test_field_0")
     expected = np.array([[c_ranges[c][0], c_ranges[c][1]] for c in c_ordering])
     assert np.all(expected == bbox)
 
-    # # do it again, it should be cached
-    assert "test_field_0" in ds.yt._bbox
-    assert np.all(expected == ds.yt._bbox["test_field_0"])
-    _ = ds.yt.get_bbox("test_field_0")
-
-    bbox = ds.yt.get_single_bbox(["test_field_0", "test_field_1"])
+    bbox, _, _, _ = ds.yt.get_single_bbox(["test_field_0", "test_field_1"])
     assert np.all(expected == bbox)
     # would be good to add a test that get_single_bbox raises an error for
     # fields with different coords -- but that requires adding a new field to
