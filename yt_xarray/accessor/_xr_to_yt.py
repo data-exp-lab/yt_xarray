@@ -2,6 +2,8 @@ import collections.abc
 from typing import List, Optional, Tuple
 
 import numpy as np
+import unyt
+import xarray as xr
 
 # collection of helpful classes and functions that ease the communication between
 # xarray and yt datasets
@@ -29,7 +31,7 @@ class Selection:
     ):
 
         self.fields = self._validate_fields(xr_ds, fields)
-        self.units = self._find_units(xr_ds)
+        self.units: dict = self._find_units(xr_ds)
         self.full_shape = xr_ds.data_vars[self.fields[0]].shape
 
         self.sel_dict = sel_dict or {}
@@ -46,14 +48,19 @@ class Selection:
         self.full_coords: Tuple[str] = None
         self.selected_coords: Tuple[str] = None
         self.starting_indices: np.ndarray = None
-
+        self.selected_time = None
         self._process_selection(xr_ds)
 
         self.yt_coord_names = _convert_to_yt_internal_coords(self.selected_coords)
 
     def _find_units(self, xr_ds) -> dict:
-        units = {getattr(xr_ds[field], "units", None) or "" for field in self.fields}
-        # could validate with unyt to see if it exists...
+
+        units = {}
+        for field in self.fields:
+            unit = getattr(xr_ds[field], "units", "")
+            if unit != "" and hasattr(unyt.unit_symbols, unit) is False:
+                unit = ""
+            units[field] = unit
         return units
 
     def _find_starting_index(self, coordname, coord_da, coord_select) -> int:
@@ -65,22 +72,32 @@ class Selection:
                 si = selector.start
             elif isinstance(selector, int):
                 si = selector
-            elif isinstance(selector, (collections.abc.Sequence, np.ndarray)):
+            elif isinstance(
+                selector, (collections.abc.Sequence, np.ndarray, xr.DataArray)
+            ):
                 # assuming that the list, array, whatever is sequential.
                 # could add a validation here. but we wont ever be able to handle
                 # a case like [2,3,4, 8, 12, 13] in a yt dataset, doesnt make
                 # sense.
-                si = selector[0]
+                if len(si) > 1:
+                    si = selector[0]
+                else:
+                    si = selector
             else:
                 raise RuntimeError(f"Unexpected sel_dict value: {coordname}:{selector}")
         elif self.sel_dict_type == "sel":
             # find the coordinate index corresponding to the selection
             if isinstance(selector, slice):
                 search_for = selector.start
-            elif isinstance(selector, float):
+            elif isinstance(selector, (float, np.datetime64, int)):
                 search_for = selector
-            elif isinstance(selector, (collections.abc.Sequence, np.ndarray)):
-                search_for = selector[0]
+            elif isinstance(
+                selector, (collections.abc.Sequence, np.ndarray, xr.DataArray)
+            ):
+                if len(selector) > 1:
+                    search_for = selector[0]
+                else:
+                    search_for = selector
             else:
                 raise RuntimeError(f"Unexpected sel_dict value: {coordname}:{selector}")
             the_index = np.where(coord_da == search_for)[0]
@@ -95,8 +112,8 @@ class Selection:
     def _process_selection(self, xr_ds):
 
         # the full list of coordinates (in order)
-        full_coords = list(xr_ds.data_vars[self.fields[0]].coords)
-
+        full_coords = list(xr_ds.data_vars[self.fields[0]].dims)
+        time = 0.0
         # for each coordinate, apply any selector and then store min/max of the
         # coordinate. If the selector results in <= 1 in one of the dimensions,
         # that dimensions is dropped from the selection
@@ -117,7 +134,7 @@ class Selection:
             coord_select = {}  # the selection dictionary just for this coordinate
             if c in self.sel_dict:
                 coord_select[c] = self.sel_dict[c]
-                si = self._find_starting_index(coord_da, coord_select)
+                si = self._find_starting_index(c, coord_da, coord_select)
 
             sel_or_isel = getattr(coord_da, self.sel_dict_type)
             coord_vals = sel_or_isel(coord_select).values
@@ -126,13 +143,17 @@ class Selection:
                 shape.append(coord_vals.size)
                 coord_list.append(c)
                 starting_indices.append(si)
+            elif coord_vals.size == 1 and "time" in c.lower():
+                # may not be general enough, but it will catch many cases
+                time = coord_vals
 
         self.selected_shape = tuple(shape)
         self.full_bbox = np.array(full_dimranges)
         self.selected_bbox = np.array(dimranges)
         self.full_coords = tuple(full_coords)
-        self.selected_coords: tuple(coord_list)
+        self.selected_coords = tuple(coord_list)
         self.starting_indices = np.array(starting_indices)
+        self.selected_time = time
 
         self.grid_dict = {
             "left_edge": self.selected_bbox[:, 0],
@@ -148,7 +169,7 @@ class Selection:
 
         # ensure that all fields have the same coordinates and the same shape
         shape = xr_ds.data_vars[fields[0]].shape
-        coords = tuple(xr_ds.data_vars[fields[0]].coords)
+        coords = xr_ds.data_vars[fields[0]].dims
 
         if len(fields) > 1:
             msg = "Provided fields must have the same "
@@ -159,7 +180,7 @@ class Selection:
                     rmsg = msg + f"shape : {f} does not match {fields[0]}"
                     raise RuntimeError(rmsg)
 
-                if tuple(xr_ds.data_vars[f].coords) != coords:
+                if tuple(xr_ds.data_vars[f].dims) != coords:
                     rmsg = msg + f"coordinates : {f} does not match {fields[0]}"
                     raise RuntimeError(rmsg)
 
@@ -178,17 +199,17 @@ _coord_aliases = {
     "longitude": ["longitude", "lon"],
 }
 
-_coord_aliases_rev = {}
+known_coord_aliases = {}
 for ky, vals in _coord_aliases.items():
     for val in vals:
-        _coord_aliases_rev[val] = ky
+        known_coord_aliases[val] = ky
 
 
 def _convert_to_yt_internal_coords(coord_list):
     yt_coords = []
     for c in coord_list:
-        if c.lower() in _coord_aliases_rev:
-            yt_coords.append(_coord_aliases_rev[c.lower()])
+        if c.lower() in known_coord_aliases:
+            yt_coords.append(known_coord_aliases[c.lower()])
         else:
             yt_coords.append(c)
 

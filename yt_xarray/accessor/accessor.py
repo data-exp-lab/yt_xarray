@@ -4,6 +4,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 import xarray as xr
 import yt
+from unyt import unyt_quantity
 
 from yt_xarray.accessor import _xr_to_yt
 
@@ -59,6 +60,14 @@ class YtAccessor:
         geom = (geomtype, sel_info.yt_coord_names)
         print(geom)
 
+        simtime = sel_info.selected_time
+        if isinstance(sel_info.selected_time, np.datetime64):
+            # float(simtime) will be nanoseconds before/after 1970-01-01
+            # would be nice to have yt ingest a np datetime, especially cause
+            # this will be converted to a float, so the roundtrip will not
+            # match exactly.
+            simtime = unyt_quantity(int(simtime), "ns")
+        kwargs.update({"sim_time": simtime})
         if use_callable:
 
             def _read_data(handle, sel_info):
@@ -127,7 +136,7 @@ class YtAccessor:
             data = {}
             for field in fields:
                 vals = sel_info.select_from_xr(self._obj, field).values
-                units = sel_info.fields[field]
+                units = sel_info.units[field]
                 data[field] = (vals, units)
 
             return yt.load_uniform_grid(
@@ -145,6 +154,7 @@ class YtAccessor:
         geometry=None,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
+        coord_aliases: Optional[dict] = None,
         **kwargs,
     ):
         """
@@ -182,6 +192,7 @@ class YtAccessor:
         geometry: Optional[str] = None,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
+        coord_aliases: Optional[dict] = None,
         **kwargs,
     ):
         """

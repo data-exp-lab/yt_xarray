@@ -1,7 +1,9 @@
+import os.path
 from typing import Optional, Tuple
 
 import numpy as np
 import xarray as xr
+import yt.config
 
 
 def construct_minimal_ds(
@@ -79,3 +81,27 @@ def construct_minimal_ds(
     other_atts = {"geospatial_vertical_units": cdict["z_units"]}
 
     return xr.Dataset(data_vars=data_vars, attrs=other_atts)
+
+
+def _find_file(file):
+    if os.path.isfile(file):
+        return file
+
+    ddir = yt.config.ytcfg.get("yt", "test_data_dir")
+    default_val = yt.config.ytcfg_defaults["yt"]["test_data_dir"]
+    if ddir != default_val:
+        possible_file = os.path.join(ddir, file)
+        if os.path.isfile(possible_file):
+            return possible_file
+
+    raise OSError(
+        f"Could not find {file} in current directory or in the yt search path ({ddir})"
+    )
+
+
+def _validate_file(function):
+    def validate_then_call(file, *args, **kwargs):
+        goodfile = _find_file(file)
+        return function(goodfile, *args, **kwargs)
+
+    return validate_then_call
