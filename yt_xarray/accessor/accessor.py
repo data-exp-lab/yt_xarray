@@ -5,6 +5,8 @@ import numpy as np
 import xarray as xr
 import yt
 
+from yt_xarray.accessor import _xr_to_yt
+
 
 @xr.register_dataset_accessor("yt")
 class YtAccessor:
@@ -30,52 +32,19 @@ class YtAccessor:
             if geomtype is None:
                 raise ValueError(
                     "Cannot determine yt geometry type, please provide"
-                    "geometry = 'geographic' or 'internal_geopgraphic'"
+                    "geometry = 'geographic', 'internal_geopgraphic' or 'cartesian'"
                 )
 
-        did_not_provide_fields = fields is None
-        if did_not_provide_fields:
+        if fields is None:
+            # might as well try!
             fields = list(self._obj.data_vars)
 
-        shape = self._obj.data_vars[fields[0]].shape
-        coords = tuple(self._obj.data_vars[fields[0]].coords)
-        fld_msg = " Please provide a subset of fields to load."
-        for f in fields:
-            if self._obj.data_vars[f].shape != shape:
-                msg = "Provided fields must have the same shape."
-                if did_not_provide_fields:
-                    msg += fld_msg
-                raise RuntimeError(msg)
-            elif tuple(self._obj.data_vars[f].coords) != coords:
-                msg = "Provided fields must have the same coordinates."
-                if did_not_provide_fields:
-                    msg += fld_msg
-                raise RuntimeError(msg)
-
-            if self._obj.data_vars[f].ndim != 3:
-                msg = (
-                    f"Fields must be 3D when loaded into yt and "
-                    f"{f}.ndim={self._obj.data_vars[f].ndim}."
-                )
-                if sel_dict is None:
-                    msg = msg + " Provide an sel_dict to reduce the dimensionality."
-                    raise RuntimeError(msg)
-                elif self._obj.data_vars[f].ndim - len(sel_dict) != 3:
-                    ndim1 = self._obj.data_vars[f].ndim - len(sel_dict)
-                    msg = (
-                        msg
-                        + f" Provided sel_dict will result in a dimensionality of {ndim1}"
-                    )
-                    raise RuntimeError(msg)
+        sel_info = _xr_to_yt.Selection(
+            self._obj, fields=fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type
+        )
 
         # need to possibly account for stretched grid here... or at
         # least check for it and raise an error...
-
-        # single grid, use whole domain for L/R edges
-        # also returns shape, corrected for selection dict
-        bbox_vals, shape, coord_list, starting_indices = self.get_single_bbox(
-            fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type
-        )
 
         if "length_unit" in kwargs:
             length_unit = kwargs.pop("length_unit")
@@ -87,41 +56,41 @@ class YtAccessor:
                     "a keyword argument."
                 )
 
-        yt_coord_list = _convert_to_yt_internal_coords(coord_list)
-        geom = (geomtype, yt_coord_list)
+        geom = (geomtype, sel_info.yt_coord_names)
         print(geom)
 
         if use_callable:
 
-            def _read_data(handle, sel_dict=None, sel_dict_type="isel"):
-
-                if sel_dict is None:
-                    sel_dict = {}
-
+            def _read_data(handle, sel_info):
                 def _reader(grid, field_name):
                     ftype, fname = field_name
-                    si = (
-                        grid.get_global_startindex() + starting_indices
+
+                    gsi = (
+                        sel_info.starting_indices
                     )  # should just set it for the grid....
+                    si = grid.get_global_startindex() + gsi
                     ei = si + grid.ActiveDimensions
-                    var = getattr(handle, fname)
+
+                    # build the index-selector for our grid
+                    c_list = sel_info.selected_coords  # the xarray coord names
                     i_select_dict = {}
-                    # e.g.,
-                    # co2 = ds.co23D.isel({"time": 0, "lat": slice(0, 3), "lon": slice(0, 3), "lev": slice(0, 5)})
                     for idim in range(3):
-                        i_select_dict[coord_list[idim]] = slice(si[idim], ei[idim])
+                        i_select_dict[c_list[idim]] = slice(si[idim], ei[idim])
 
                     # apply any initial selections, only along dimensions
                     # not covered in the grid here, accounting for sel vs isel.
+                    # these selections **should** reduce the dimensionality
+                    # of the array.
                     first_selection = {}
-                    for ky, val in sel_dict.items():
+                    for ky, val in sel_info.sel_dict.items():
                         if ky not in i_select_dict:
-                            if sel_dict_type == "sel":
+                            if sel_info.sel_dict_type == "sel":
                                 first_selection[ky] = val
                             else:
                                 # just add it to the i_select_dict
                                 i_select_dict[ky] = val
 
+                    var = getattr(handle, fname)
                     if first_selection:
                         data = var.sel(first_selection).isel(i_select_dict)
                     else:
@@ -132,62 +101,40 @@ class YtAccessor:
 
                 return _reader
 
-            reader = _read_data(
-                self._obj, sel_dict=sel_dict, sel_dict_type=sel_dict_type
-            )
+            reader = _read_data(self._obj, sel_info)
 
             data = {}
             for field in fields:
-                units = getattr(self._obj.data_vars[field], "units", None) or ""
+                units = sel_info.fields[field]
                 data[field] = (reader, units)
 
-            data.update(
-                {
-                    "left_edge": bbox_vals[:, 0],
-                    "right_edge": bbox_vals[:, 1],
-                    "dimensions": shape,
-                    "level": 0,
-                }
-            )
-
+            data.update(sel_info.grid_dict)
             grid_data = [
                 data,
             ]
 
             return yt.load_amr_grids(
                 grid_data,
-                shape,
+                sel_info.selected_shape,
                 geometry=geom,
-                bbox=bbox_vals,
+                bbox=sel_info.selected_bbox,
                 length_unit=length_unit,
                 **kwargs,
             )
 
         else:
             # should account for stretched grid here?
-
-            # should account for sel_dict_type here too.
             data = {}
             for field in fields:
-                if sel_dict is not None:
-                    if sel_dict_type == "isel":
-                        vals = self._obj[field].isel(sel_dict).values
-                    elif sel_dict_type == "sel":
-                        vals = self._obj[field].sel(sel_dict).values
-                    else:
-                        raise ValueError(
-                            f"Unexpected value for sel_dict_type. Expected 'isel' or 'sel', found {sel_dict_type}"
-                        )
-                else:
-                    vals = self._obj[field].values
-                # could add on units here
-                data[field] = vals
+                vals = sel_info.select_from_xr(self._obj, field).values
+                units = sel_info.fields[field]
+                data[field] = (vals, units)
 
             return yt.load_uniform_grid(
                 data,
-                shape,
+                sel_info.selected_shape,
                 length_unit=length_unit,
-                bbox=bbox_vals,
+                bbox=sel_info.selected_bbox,
                 geometry=geom,
                 **kwargs,
             )
@@ -268,13 +215,6 @@ class YtAccessor:
             return self._obj.geospatial_vertical_units
         return None
 
-    def _get_yt_coordlist(self) -> Tuple[str]:
-        # yt expects certain coordinate names, need a way to handle those.
-        # in some cases, simple aliasing may be enough. Leaving this as a
-        # placeholder. see yt/geometry/coordinates/geographic_coordinates.py
-        # e.g., geographic expects 'altitude'.
-        return self._coord_list
-
     _coord_type = None
 
     def set_coordinate_type(self, coordinate_type: str):
@@ -337,7 +277,7 @@ class YtAccessor:
         sel_dict_type: Optional[str] = "isel",
     ) -> np.ndarray:
         """
-        return the bounding box array for a field
+        return the bounding box array for a field, with possible selections
 
         Parameters
         ----------
@@ -354,78 +294,10 @@ class YtAccessor:
 
         """
 
-        # import xarray as xr
-        # import yt_xarray
-        # ds = xr.open_dataset(
-        #     "/home/chavlin/hdd/data/yt_data/yt_sample_sets/cmip6/co23D_Emon_GISS-E2-1-G_piControl_r101i1p1f1_gn_185001-190012.nc")
-        # print(ds.yt.get_bbox('co23D'))
-        # print("\nwith time selection:")
-        # print(ds.yt.get_bbox('co23D', sel_dict=dict(time=0)))
-
-        if sel_dict_type not in ["isel", "sel"]:
-            raise ValueError(
-                f"sel_dict_type must be one of isel or sel, found {sel_dict_type}"
-            )
-
-        # the full list of coordinates (in order)
-        full_coords = list(getattr(self._obj, field).coords)
-
-        # find bounding box, accounting for isel
-        if sel_dict is None:
-            sel_dict = {}
-
-        # for each coordinate, apply any selector and then store min/max of the
-        # coordinate. If the selector results in <= 1 in one of the dimensions,
-        # that dimensions is dropped.
-        shape = []
-        dimranges = []
-        coord_list = []
-        starting_indices = []
-        for c in full_coords:
-            coord_select = {}
-            si = 0
-            if c in sel_dict:
-                coord_select[c] = sel_dict[c]
-                if isinstance(sel_dict[c], slice):
-                    si = sel_dict[c].start
-            coord_da = getattr(self._obj, c)
-            selector = getattr(coord_da, sel_dict_type)  # ds.variable.sel or .isel
-            coord_vals = selector(coord_select).values
-            if coord_vals.size > 1:
-                dimranges.append([coord_vals.min(), coord_vals.max()])
-                shape.append(coord_vals.size)
-                coord_list.append(c)
-                starting_indices.append(si)
-        shape = tuple(shape)
-        bbox = np.array(dimranges)
-        starting_indices = np.array(starting_indices)
-
-        return bbox, shape, coord_list, starting_indices
-
-    def get_single_bbox(
-        self,
-        fields: List[str],
-        sel_dict: Optional[dict] = None,
-        sel_dict_type: Optional[str] = "isel",
-    ) -> np.ndarray:
-        # return the bounding box for a set of fields. Will return a single
-        # bounding box if all fields share a bounding box, otherwise will
-        # error.
-
-        # assemble the set of coordinates just to check that all the fields have
-        # the same coordinates
-        coord_sets = set()
-        for field in fields:
-            coord_sets.add(self._get_field_coord_tuple(field))
-
-        if len(coord_sets) > 1:
-            msg = (
-                "multiple bounding boxes found for given field list during an "
-                "operation that requires a single bounding box."
-            )
-            raise RuntimeError(msg)
-
-        return self.get_bbox(fields[0], sel_dict=sel_dict, sel_dict_type=sel_dict_type)
+        sel_info = _xr_to_yt.Selection(
+            self._obj, fields=[field], sel_dict=sel_dict, sel_dict_type=sel_dict_type
+        )
+        return sel_info.selected_bbox
 
 
 def _determine_yt_geomtype(coord_type: str, coord_list: List[str]) -> Optional[str]:
@@ -439,26 +311,3 @@ def _determine_yt_geomtype(coord_type: str, coord_list: List[str]) -> Optional[s
         return None
     elif coord_type == "cartesian":
         return "cartesian"
-
-
-_coord_aliases = {
-    "altitude": ["altitude", "height", "level", "lev"],
-    "latitude": ["latitude", "lat"],
-    "longitude": ["longitude", "lon"],
-}
-
-_coord_aliases_rev = {}
-for ky, vals in _coord_aliases.items():
-    for val in vals:
-        _coord_aliases_rev[val] = ky
-
-
-def _convert_to_yt_internal_coords(coord_list):
-    yt_coords = []
-    for c in coord_list:
-        if c.lower() in _coord_aliases_rev:
-            yt_coords.append(_coord_aliases_rev[c.lower()])
-        else:
-            yt_coords.append(c)
-
-    return yt_coords
