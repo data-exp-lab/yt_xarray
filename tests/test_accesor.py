@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-import yt
 
 import yt_xarray  # noqa: F401
 from yt_xarray._utilities import construct_minimal_ds
@@ -134,9 +133,6 @@ def test_load_uniform_grid(ds_xr):
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
 
-@pytest.mark.skipif(
-    yt.__version__.startswith("4.1") is False, reason="requires yt>=4.1.0"
-)
 def test_load_grid_from_callable(ds_xr):
     ds = ds_xr.yt.load_grid_from_callable()
     flds = list(ds_xr.data_vars)
@@ -147,9 +143,6 @@ def test_load_grid_from_callable(ds_xr):
     assert len(f) == ds_xr.data_vars[flds[0]].size
 
 
-@pytest.mark.skipif(
-    yt.__version__.startswith("4.1") is False, reason="requires yt>=4.1.0"
-)
 def test_yt_ds_attr(ds_xr):
     ds = ds_xr.yt.ds()
     flds = list(ds_xr.data_vars)
