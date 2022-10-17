@@ -73,15 +73,12 @@ def test_bbox():
     )
 
     # normal bbox should return the input ranges
-    bbox, _, _, _ = ds.yt.get_bbox("test_field_0")
+    bbox = ds.yt.get_bbox("test_field_0")
     expected = np.array([[c_ranges[c][0], c_ranges[c][1]] for c in c_ordering])
     assert np.all(expected == bbox)
 
-    bbox, _, _, _ = ds.yt.get_single_bbox(["test_field_0", "test_field_1"])
+    bbox = ds.yt.get_bbox("test_field_1")
     assert np.all(expected == bbox)
-    # would be good to add a test that get_single_bbox raises an error for
-    # fields with different coords -- but that requires adding a new field to
-    # the test dataset.
 
 
 def test_load_uniform_grid(ds_xr):

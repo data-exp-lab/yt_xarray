@@ -114,7 +114,7 @@ class YtAccessor:
 
             data = {}
             for field in fields:
-                units = sel_info.fields[field]
+                units = sel_info.units[field]
                 data[field] = (reader, units)
 
             data.update(sel_info.grid_dict)
