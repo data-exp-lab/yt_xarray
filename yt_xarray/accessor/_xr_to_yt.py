@@ -79,7 +79,7 @@ class Selection:
                 # could add a validation here. but we wont ever be able to handle
                 # a case like [2,3,4, 8, 12, 13] in a yt dataset, doesnt make
                 # sense.
-                if len(si) > 1:
+                if len(selector) > 1:
                     si = selector[0]
                 else:
                     si = selector
@@ -117,7 +117,7 @@ class Selection:
         # for each coordinate, apply any selector and then store min/max of the
         # coordinate. If the selector results in <= 1 in one of the dimensions,
         # that dimensions is dropped from the selection
-        shape = []  # the shape after selctions
+        shape = []  # the shape after selections
         dimranges = []  # the min, max after selections
         full_dimranges = []  # the global min, max
         coord_list = []  # the coord list after selection
@@ -146,6 +146,12 @@ class Selection:
             elif coord_vals.size == 1 and "time" in c.lower():
                 # may not be general enough, but it will catch many cases
                 time = coord_vals
+
+        if len(shape) > 3:
+            raise ValueError(
+                f"ndim is {shape}, please provide a sel_dict to"
+                f" reduce dimensionality to 3."
+            )
 
         self.selected_shape = tuple(shape)
         self.full_bbox = np.array(full_dimranges)

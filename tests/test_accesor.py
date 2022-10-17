@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 import yt_xarray  # noqa: F401
-from yt_xarray._utilities import construct_minimal_ds
+from yt_xarray._utilities import construct_ds_with_time, construct_minimal_ds
 
 
 @pytest.fixture()
@@ -148,3 +148,18 @@ def test_yt_ds_attr(ds_xr):
 
     f = ds.all_data()[flds[0]]
     assert len(f) == ds_xr.data_vars[flds[0]].size
+
+
+@pytest.mark.parametrize("coord_set", range(5))
+def test_time_reduction(coord_set):
+    ds = construct_ds_with_time(coord_set)
+    flds = list(ds.data_vars)
+
+    with pytest.raises(ValueError, match=r".* reduce dimensionality .*"):
+        _ = ds.yt.load_uniform_grid(flds, length_unit="km")
+
+    ds_yt = ds.yt.load_uniform_grid(flds, length_unit="km", sel_dict={"time": 0})
+    f = ds_yt.all_data()[("stream", flds[0])]
+    expected = ds.data_vars[flds[0]].isel({"time": 0}).values
+    assert len(f) == expected.size
+    assert ds_yt.current_time == float(ds.time[0].values)
