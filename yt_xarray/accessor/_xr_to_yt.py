@@ -220,3 +220,16 @@ def _convert_to_yt_internal_coords(coord_list):
             yt_coords.append(c)
 
     return yt_coords
+
+
+def _determine_yt_geomtype(coord_type: str, coord_list: List[str]) -> Optional[str]:
+    if coord_type == "geodetic":
+        # is it internal or external
+        possible_alts = _coord_aliases["altitude"]
+        if "depth" in coord_list:
+            return "internal_geographic"
+        elif any([i in coord_list for i in possible_alts]):
+            return "geographic"
+        return None
+    elif coord_type == "cartesian":
+        return "cartesian"

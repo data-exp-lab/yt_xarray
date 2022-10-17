@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
 import xarray as xr
@@ -7,6 +7,7 @@ import yt
 from unyt import unyt_quantity
 
 from yt_xarray.accessor import _xr_to_yt
+from yt_xarray.accessor._xr_to_yt import _determine_yt_geomtype
 
 
 @xr.register_dataset_accessor("yt")
@@ -28,14 +29,6 @@ class YtAccessor:
         **kwargs,
     ):
 
-        if geometry is None:
-            geomtype = _determine_yt_geomtype(self.coord_type, self._coord_list)
-            if geomtype is None:
-                raise ValueError(
-                    "Cannot determine yt geometry type, please provide"
-                    "geometry = 'geographic', 'internal_geopgraphic' or 'cartesian'"
-                )
-
         if fields is None:
             # might as well try!
             fields = list(self._obj.data_vars)
@@ -43,6 +36,14 @@ class YtAccessor:
         sel_info = _xr_to_yt.Selection(
             self._obj, fields=fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type
         )
+
+        if geometry is None:
+            geomtype = _determine_yt_geomtype(self.coord_type, sel_info.selected_coords)
+            if geomtype is None:
+                raise ValueError(
+                    "Cannot determine yt geometry type, please provide"
+                    "geometry = 'geographic', 'internal_geopgraphic' or 'cartesian'"
+                )
 
         # need to possibly account for stretched grid here... or at
         # least check for it and raise an error...
@@ -239,8 +240,10 @@ class YtAccessor:
         # try to infer if we have a geodetic dataset. the differentiation
         # between internal and not used by yt (internal_geographic vs geographic)
         # is not applied here, but is when converting to a yt dataset (see
-        # _determine_yt_geomtype). Default is to assume cartesian.
-        geodetic_names = ["latitude", "longitude", "lat", "lon"]
+        # _xr_to_yt._determine_yt_geomtype). Default is to assume cartesian.
+        geodetic_names = (
+            _xr_to_yt._coord_aliases["latitude"] + _xr_to_yt._coord_aliases["longitude"]
+        )
         ctype = "cartesian"
         for coord in list(self._obj.coords):
             if coord.lower() in geodetic_names:
@@ -259,25 +262,6 @@ class YtAccessor:
         # a list of all dataset coordinates. Note that dataset fields
         # may use a different ordering!!!
         return list(self._obj.coords.keys())
-
-    @property
-    def field_list(self):
-        # a list of variables that are not coordinates
-        return [i for i in self._obj.variables if i not in self._obj.coords]
-
-    def _get_field_coord_tuple(
-        self, field: str, isel: Optional[dict] = None
-    ) -> Tuple[str]:
-        # return the ordered coordinate names for a field
-        c = list(self._obj[field].coords)  # e.g., (time, lev, lat, lon)
-        if isel is not None:
-            c = [_ for _ in c if _ not in isel]
-        return tuple(c)
-
-    def get_field_coords(self, field: str, isel: Optional[dict] = None):
-        field_coords = self._get_field_coord_tuple(field, isel=isel)
-        c = [self._obj[f].values for f in field_coords]
-        return c
 
     def get_bbox(
         self,
@@ -307,16 +291,3 @@ class YtAccessor:
             self._obj, fields=[field], sel_dict=sel_dict, sel_dict_type=sel_dict_type
         )
         return sel_info.selected_bbox
-
-
-def _determine_yt_geomtype(coord_type: str, coord_list: List[str]) -> Optional[str]:
-    if coord_type == "geodetic":
-        # is it internal or external
-        possible_alts = ["altitude", "height", "level", "lev"]
-        if "depth" in coord_list:
-            return "internal_geographic"
-        elif any([i in coord_list for i in possible_alts]):
-            return "geographic"
-        return None
-    elif coord_type == "cartesian":
-        return "cartesian"

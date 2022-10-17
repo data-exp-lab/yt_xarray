@@ -42,16 +42,9 @@ def test_accessor():
     assert ds.yt.coord_type == "geodetic"
     assert all([i in ds.yt._coord_list for i in ds.coords.keys()])
 
-    assert tfield in ds.yt.field_list
-    assert all([i not in ds.yt.field_list for i in ds.yt._coord_list])
-
-    x, y, z = ds.yt.get_field_coords(tfield)
-    assert len(x) == n_x
-    assert len(y) == n_y
-    assert len(z) == n_z
-
     ds = construct_minimal_ds(x_name="x", y_name="y", z_name="z")
     assert ds.yt.coord_type == "cartesian"
+    assert all([i in ds.yt._coord_list for i in ds.coords.keys()])
 
 
 def test_bbox():
