@@ -1,7 +1,11 @@
+import os.path
 from typing import Optional, Tuple
 
 import numpy as np
 import xarray as xr
+import yt.config
+
+from yt_xarray.accessor._xr_to_yt import known_coord_aliases
 
 
 def construct_minimal_ds(
@@ -79,3 +83,89 @@ def construct_minimal_ds(
     other_atts = {"geospatial_vertical_units": cdict["z_units"]}
 
     return xr.Dataset(data_vars=data_vars, attrs=other_atts)
+
+
+def _test_time_coord(nt=5):
+    t0 = np.datetime64("2001-01-02").astype("datetime64[ns]")
+    dt = np.timedelta64(1, "D")
+    tvals = [t0]
+    for _ in range(nt):
+        tvals.append(tvals[-1] + dt)
+    return np.array(tvals)
+
+
+def _get_test_coord(
+    cname, n, minv: Optional[float] = None, maxv: Optional[float] = None
+):
+
+    if cname in known_coord_aliases:
+        cname = known_coord_aliases[cname]
+
+    if cname == "time":
+        return _test_time_coord(nt=n)
+
+    if cname == "latitude":
+        if minv is None:
+            minv = -90.0
+        if maxv is None:
+            maxv = 90.0
+        return np.linspace(minv, maxv, n)
+
+    if cname == "longitude":
+        if minv is None:
+            minv = -180.0
+        if maxv is None:
+            maxv = 180.0
+        return np.linspace(minv, maxv, n)
+
+    if minv is None:
+        minv = 0.0
+    if maxv is None:
+        maxv = 1.0
+
+    return np.linspace(minv, maxv, n)
+
+
+def construct_ds_with_time(icoord):
+
+    coord_configs = {
+        0: ("time", "x", "y", "z"),
+        1: ("time", "z", "y", "x"),
+        2: ("time", "lon", "lat", "lev"),
+        3: ("time", "longitude", "latitude", "altitude"),
+        4: ("time", "depth", "longitude", "lat"),
+    }
+
+    data_vars = {}
+    coords = {c: _get_test_coord(c, icoord + 4) for c in coord_configs[icoord]}
+    var_shape = tuple([len(c) for c in coords.values()])
+    vals = np.random.random(var_shape)
+    fname = f"test_case_{icoord}"
+    da = xr.DataArray(vals, coords=coords, dims=coord_configs[icoord])
+    data_vars[fname] = da
+
+    return xr.Dataset(data_vars=data_vars)
+
+
+def _find_file(file):
+    if os.path.isfile(file):
+        return file
+
+    ddir = yt.config.ytcfg.get("yt", "test_data_dir")
+    default_val = yt.config.ytcfg_defaults["yt"]["test_data_dir"]
+    if ddir != default_val:
+        possible_file = os.path.join(ddir, file)
+        if os.path.isfile(possible_file):
+            return possible_file
+
+    raise OSError(
+        f"Could not find {file} in current directory or in the yt search path ({ddir})"
+    )
+
+
+def _validate_file(function):
+    def validate_then_call(file, *args, **kwargs):
+        goodfile = _find_file(file)
+        return function(goodfile, *args, **kwargs)
+
+    return validate_then_call

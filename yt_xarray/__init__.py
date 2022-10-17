@@ -8,4 +8,6 @@ __version__ = "0.1.0"
 # import the yt frontend and the xarray accessor so they are registered with
 # their respective codes
 
-from yt_xarray.accessor import YtAccessor
+from .accessor import YtAccessor
+from .accessor._xr_to_yt import known_coord_aliases
+from .yt_xarray import open_dataset
