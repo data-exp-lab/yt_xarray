@@ -79,7 +79,7 @@ class Selection:
                 # could add a validation here. but we wont ever be able to handle
                 # a case like [2,3,4, 8, 12, 13] in a yt dataset, doesnt make
                 # sense.
-                if len(selector) > 1:
+                if _size_of_array_like(selector) > 1:
                     si = selector[0]
                 else:
                     si = selector
@@ -94,7 +94,7 @@ class Selection:
             elif isinstance(
                 selector, (collections.abc.Sequence, np.ndarray, xr.DataArray)
             ):
-                if len(selector) > 1:
+                if _size_of_array_like(selector) > 1:
                     search_for = selector[0]
                 else:
                     search_for = selector
@@ -233,3 +233,11 @@ def _determine_yt_geomtype(coord_type: str, coord_list: List[str]) -> Optional[s
         return None
     elif coord_type == "cartesian":
         return "cartesian"
+
+
+def _size_of_array_like(v):
+
+    if isinstance(v, (np.ndarray, xr.DataArray)):
+        return v.size
+
+    return len(v)

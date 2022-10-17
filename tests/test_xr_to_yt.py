@@ -121,7 +121,7 @@ def test_selection_sel(ds_xr, coord):
     assert sel.selected_shape[dim_id] == 2
 
     # check that selecting a single value reduces the dimensionality
-    sel_dict = {coord: float(ds_xr.coords[coord].values[1])}
+    sel_dict = {coord: ds_xr.coords[coord].values[1]}
     sel = Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
     assert len(sel.selected_shape) == 2
     assert coord not in sel.selected_coords
