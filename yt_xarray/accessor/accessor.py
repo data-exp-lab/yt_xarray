@@ -154,7 +154,6 @@ class YtAccessor:
         geometry=None,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
-        coord_aliases: Optional[dict] = None,
         **kwargs,
     ):
         """
@@ -192,7 +191,6 @@ class YtAccessor:
         geometry: Optional[str] = None,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
-        coord_aliases: Optional[dict] = None,
         **kwargs,
     ):
         """

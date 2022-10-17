@@ -1,7 +1,12 @@
 import numpy as np
 import pytest
+import xarray as xr
 
-from yt_xarray._utilities import construct_ds_with_time, construct_minimal_ds
+from yt_xarray._utilities import (
+    _get_test_coord,
+    construct_ds_with_time,
+    construct_minimal_ds,
+)
 from yt_xarray.accessor._xr_to_yt import Selection, _coord_aliases, known_coord_aliases
 
 
@@ -137,3 +142,29 @@ def test_time_reduction(coord_set):
         ds, list(ds.data_vars), sel_dict={"time": timetoselect}, sel_dict_type="sel"
     )
     assert len(sel.selected_shape) == 3
+
+
+def test_coord_aliasing():
+    clist = ("c1", "c2", "c3")
+
+    coords = {c: _get_test_coord(c, 4) for c in clist}
+    var_shape = tuple([len(c) for c in coords.values()])
+    vals = np.random.random(var_shape)
+    da = xr.DataArray(vals, coords=coords, dims=clist)
+    fld = "test_field"
+    ds = xr.Dataset(data_vars={fld: da})
+
+    known_coord_aliases["c1"] = "x"
+    known_coord_aliases["c2"] = "y"
+    known_coord_aliases["c3"] = "z"
+
+    sel = Selection(
+        ds,
+        [
+            fld,
+        ],
+    )
+    for c in clist:
+        assert c not in sel.yt_coord_names
+    for c in "xyz":
+        assert c in sel.yt_coord_names
