@@ -89,7 +89,7 @@ def _test_time_coord(nt=5):
     t0 = np.datetime64("2001-01-02").astype("datetime64[ns]")
     dt = np.timedelta64(1, "D")
     tvals = [t0]
-    for it in range(nt):
+    for _ in range(nt):
         tvals.append(tvals[-1] + dt)
     return np.array(tvals)
 
