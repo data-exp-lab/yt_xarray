@@ -38,8 +38,8 @@ class YtAccessor:
         )
 
         if geometry is None:
-            geomtype = _determine_yt_geomtype(self.coord_type, sel_info.selected_coords)
-            if geomtype is None:
+            geometry = _determine_yt_geomtype(self.coord_type, sel_info.selected_coords)
+            if geometry is None:
                 raise ValueError(
                     "Cannot determine yt geometry type, please provide"
                     "geometry = 'geographic', 'internal_geopgraphic' or 'cartesian'"
@@ -58,7 +58,7 @@ class YtAccessor:
                     "a keyword argument."
                 )
 
-        geom = (geomtype, sel_info.yt_coord_names)
+        geom = (geometry, sel_info.yt_coord_names)
         print(geom)
 
         simtime = sel_info.selected_time

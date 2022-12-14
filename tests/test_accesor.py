@@ -176,3 +176,9 @@ def test_coord_aliasing():
     ds_yt = ds.yt.load_uniform_grid([fld], length_unit="km")
     f = ds_yt.all_data()[("stream", fld)]
     assert len(f) == ds.data_vars[fld].size
+
+
+def test_geom_kwarg(ds_xr):
+    # make sure we can specify the geometry
+    flds = ["a_new_field_0", "a_new_field_1"]
+    _ = ds_xr.yt.load_uniform_grid(fields=flds, geometry="cartesian")
