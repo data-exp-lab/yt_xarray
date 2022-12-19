@@ -7,7 +7,7 @@ import yt
 from unyt import unyt_quantity
 
 from yt_xarray.accessor import _xr_to_yt
-from yt_xarray.accessor._xr_to_yt import _determine_yt_geomtype
+from yt_xarray.accessor._xr_to_yt import _add_3rd_axis_name, _determine_yt_geomtype
 
 
 @xr.register_dataset_accessor("yt")
@@ -26,6 +26,7 @@ class YtAccessor:
         use_callable=True,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
+        allow_time_as_dim: Optional[bool] = False,
         **kwargs,
     ):
 
@@ -34,7 +35,11 @@ class YtAccessor:
             fields = list(self._obj.data_vars)
 
         sel_info = _xr_to_yt.Selection(
-            self._obj, fields=fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type
+            self._obj,
+            fields=fields,
+            sel_dict=sel_dict,
+            sel_dict_type=sel_dict_type,
+            allow_time_as_dim=allow_time_as_dim,
         )
 
         if geometry is None:
@@ -58,8 +63,9 @@ class YtAccessor:
                     "a keyword argument."
                 )
 
-        geom = (geometry, sel_info.yt_coord_names)
-        print(geom)
+        axis_order = sel_info.yt_coord_names
+
+        geom = (geometry, axis_order)
 
         simtime = sel_info.selected_time
         if isinstance(sel_info.selected_time, np.datetime64):
@@ -69,6 +75,16 @@ class YtAccessor:
             # match exactly.
             simtime = unyt_quantity(int(simtime), "ns")
         kwargs.update({"sim_time": simtime})
+
+        data_shp = sel_info.selected_shape
+        bbox = sel_info.selected_bbox
+        if sel_info.ndims == 2:
+            axis_order = geom[1]
+            axis_order = _add_3rd_axis_name(geom[0], axis_order)
+            geom = (geom[0], axis_order)
+            data_shp = data_shp + (1,)
+            bbox = np.vstack([bbox, [0, 1]])
+
         if use_callable:
 
             def _read_data(handle, sel_info):
@@ -78,13 +94,22 @@ class YtAccessor:
                     gsi = (
                         sel_info.starting_indices
                     )  # should just set it for the grid....
+                    if sel_info.ndims == 2:
+                        gsi = np.concatenate(
+                            [
+                                gsi,
+                                [
+                                    0,
+                                ],
+                            ]
+                        )
                     si = grid.get_global_startindex() + gsi
                     ei = si + grid.ActiveDimensions
 
                     # build the index-selector for our grid
                     c_list = sel_info.selected_coords  # the xarray coord names
                     i_select_dict = {}
-                    for idim in range(3):
+                    for idim in range(sel_info.ndims):  # 2d/3d issue here
                         i_select_dict[c_list[idim]] = slice(si[idim], ei[idim])
 
                     # apply any initial selections, only along dimensions
@@ -105,9 +130,10 @@ class YtAccessor:
                         data = var.sel(first_selection).isel(i_select_dict)
                     else:
                         data = var.isel(i_select_dict)
-
-                    # data = var[si[0] : ei[0], si[1] : ei[1], si[2] : ei[2]]
-                    return data.values
+                    vals = data.values
+                    if sel_info.ndims == 2:
+                        vals = np.expand_dims(vals, axis=-1)
+                    return vals
 
                 return _reader
 
@@ -118,16 +144,36 @@ class YtAccessor:
                 units = sel_info.units[field]
                 data[field] = (reader, units)
 
-            data.update(sel_info.grid_dict)
+            g_dict = sel_info.grid_dict.copy()
+            if sel_info.ndims == 2:
+                g_dict["left_edge"] = np.concatenate(
+                    [
+                        g_dict["left_edge"],
+                        [
+                            -0.5,
+                        ],
+                    ]
+                )
+                g_dict["right_edge"] = np.concatenate(
+                    [
+                        g_dict["right_edge"],
+                        [
+                            0.5,
+                        ],
+                    ]
+                )
+                g_dict["dimensions"] += (1,)
+
+            data.update(g_dict)
             grid_data = [
                 data,
             ]
 
             return yt.load_amr_grids(
                 grid_data,
-                sel_info.selected_shape,
+                data_shp,
                 geometry=geom,
-                bbox=sel_info.selected_bbox,
+                bbox=bbox,
                 length_unit=length_unit,
                 **kwargs,
             )
@@ -135,16 +181,19 @@ class YtAccessor:
         else:
             # should account for stretched grid here?
             data = {}
+
             for field in fields:
                 vals = sel_info.select_from_xr(self._obj, field).values
+                if sel_info.ndims == 2:
+                    vals = np.expand_dims(vals, axis=-1)
                 units = sel_info.units[field]
                 data[field] = (vals, units)
 
             return yt.load_uniform_grid(
                 data,
-                sel_info.selected_shape,
+                data_shp,
                 length_unit=length_unit,
-                bbox=sel_info.selected_bbox,
+                bbox=bbox,
                 geometry=geom,
                 **kwargs,
             )
@@ -155,6 +204,7 @@ class YtAccessor:
         geometry=None,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
+        allow_time_as_dim: Optional[bool] = False,
         **kwargs,
     ):
         """
@@ -183,6 +233,7 @@ class YtAccessor:
             geometry=geometry,
             sel_dict=sel_dict,
             sel_dict_type=sel_dict_type,
+            allow_time_as_dim=allow_time_as_dim,
             **kwargs,
         )
 
@@ -192,6 +243,7 @@ class YtAccessor:
         geometry: Optional[str] = None,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
+        allow_time_as_dim: Optional[bool] = False,
         **kwargs,
     ):
         """
@@ -214,6 +266,7 @@ class YtAccessor:
             use_callable=False,
             sel_dict=sel_dict,
             sel_dict_type=sel_dict_type,
+            allow_time_as_dim=allow_time_as_dim,
             **kwargs,
         )
 
