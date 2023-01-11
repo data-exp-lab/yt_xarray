@@ -1,13 +1,14 @@
 import numpy as np
 import pytest
 import xarray as xr
+import yt
 
+import yt_xarray.accessor._xr_to_yt as xr2yt
 from yt_xarray._utilities import (
     _get_test_coord,
     construct_ds_with_time,
     construct_minimal_ds,
 )
-from yt_xarray.accessor._xr_to_yt import Selection, _coord_aliases, known_coord_aliases
 
 
 @pytest.fixture()
@@ -35,19 +36,19 @@ c_m_ds_kwargs = {"latitude": "y_name", "longitude": "x_name", "altitude": "z_nam
 @pytest.mark.parametrize("coord", ("latitude", "longitude", "altitude"))
 def test_selection_aliases(coord):
 
-    for othername in _coord_aliases[coord]:
+    for othername in xr2yt._coord_aliases[coord]:
 
         kwargs = {c_m_ds_kwargs[coord]: othername}
         ds = construct_minimal_ds(**kwargs)
         fields = list(ds.data_vars)
-        sel = Selection(ds, fields)
+        sel = xr2yt.Selection(ds, fields)
         assert np.all(sel.starting_indices == np.array((0, 0, 0)))
         assert sel.selected_shape == ds.data_vars[fields[0]].shape
 
         if othername not in ("latitude", "longitude", "altitude"):
             # only check the non-yt names
             assert othername not in sel.yt_coord_names
-            assert known_coord_aliases[othername] in sel.yt_coord_names
+            assert xr2yt.known_coord_aliases[othername] in sel.yt_coord_names
 
 
 def _isel_tester(ds_xr, sel, fields, coord, start_index):
@@ -75,23 +76,23 @@ def test_selection_isel(ds_xr, coord):
 
     sel_dict = {coord: slice(1, len(ds_xr.coords[coord]))}
     sel_dict_type = "isel"
-    sel = Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
+    sel = xr2yt.Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
     _isel_tester(ds_xr, sel, fields, coord, 1)
 
     sel_dict = {coord: [1, 2]}
-    sel = Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
+    sel = xr2yt.Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
     _isel_tester(ds_xr, sel, fields, coord, 1)
     dim_id = ds_xr.data_vars[fields[0]].dims.index(coord)
     assert sel.selected_shape[dim_id] == 2
 
     sel_dict = {coord: np.array([1, 2])}
-    sel = Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
+    sel = xr2yt.Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
     _isel_tester(ds_xr, sel, fields, coord, 1)
     assert sel.selected_shape[dim_id] == 2
 
     # check that selecting a single value reduces the dimensionality
     sel_dict = {coord: 1}
-    sel = Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
+    sel = xr2yt.Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
     assert len(sel.selected_shape) == 2
     assert coord not in sel.selected_coords
 
@@ -104,25 +105,25 @@ def test_selection_sel(ds_xr, coord):
 
     sel_dict = {coord: slice(search_for, ds_xr.coords[coord].values.max())}
     sel_dict_type = "sel"
-    sel = Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
+    sel = xr2yt.Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
     _isel_tester(ds_xr, sel, fields, coord, 1)
 
     search_for = ds_xr.coords[coord].isel({coord: [1, 2]}).values
     sel_dict = {coord: search_for}
-    sel = Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
+    sel = xr2yt.Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
     _isel_tester(ds_xr, sel, fields, coord, 1)
     dim_id = ds_xr.data_vars[fields[0]].dims.index(coord)
     assert sel.selected_shape[dim_id] == 2
 
     search_for = search_for.tolist()
     sel_dict = {coord: search_for}
-    sel = Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
+    sel = xr2yt.Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
     _isel_tester(ds_xr, sel, fields, coord, 1)
     assert sel.selected_shape[dim_id] == 2
 
     # check that selecting a single value reduces the dimensionality
     sel_dict = {coord: ds_xr.coords[coord].values[1]}
-    sel = Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
+    sel = xr2yt.Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
     assert len(sel.selected_shape) == 2
     assert coord not in sel.selected_coords
 
@@ -132,13 +133,13 @@ def test_time_reduction(coord_set):
     ds = construct_ds_with_time(coord_set)
 
     with pytest.raises(ValueError, match=r".* reduce dimensionality .*"):
-        _ = Selection(ds, list(ds.data_vars))
+        _ = xr2yt.Selection(ds, list(ds.data_vars))
 
-    sel = Selection(ds, list(ds.data_vars), sel_dict={"time": 0})
+    sel = xr2yt.Selection(ds, list(ds.data_vars), sel_dict={"time": 0})
     assert len(sel.selected_shape) == 3
 
     timetoselect = ds.time.isel({"time": 1}).values
-    sel = Selection(
+    sel = xr2yt.Selection(
         ds, list(ds.data_vars), sel_dict={"time": timetoselect}, sel_dict_type="sel"
     )
     assert len(sel.selected_shape) == 3
@@ -154,11 +155,11 @@ def test_coord_aliasing():
     fld = "test_field"
     ds = xr.Dataset(data_vars={fld: da})
 
-    known_coord_aliases["c1"] = "x"
-    known_coord_aliases["c2"] = "y"
-    known_coord_aliases["c3"] = "z"
+    xr2yt.known_coord_aliases["c1"] = "x"
+    xr2yt.known_coord_aliases["c2"] = "y"
+    xr2yt.known_coord_aliases["c3"] = "z"
 
-    sel = Selection(
+    sel = xr2yt.Selection(
         ds,
         [
             fld,
@@ -168,3 +169,99 @@ def test_coord_aliasing():
         assert c not in sel.yt_coord_names
     for c in "xyz":
         assert c in sel.yt_coord_names
+
+
+@pytest.mark.parametrize("method", ["load_grid_from_callable", "load_uniform_grid"])
+def test_two_dimensional(method):
+    x = np.linspace(0, 1, 16)
+    y = np.linspace(0, 1, 16)
+    z = np.linspace(0, 1, 16)
+    time = np.linspace(0, 1, 5)
+
+    shp = (x.size, y.size, z.size)
+
+    data = {
+        "temp": xr.DataArray(
+            np.random.rand(*shp), coords={"x": x, "y": y, "z": z}, dims=("x", "y", "z")
+        ),
+        "precip": xr.DataArray(
+            np.random.rand(*shp[:-1]), coords={"x": x, "y": y}, dims=("x", "y")
+        ),
+        "precip_t": xr.DataArray(
+            np.random.rand(time.size, x.size, y.size),
+            coords={"time": time, "x": x, "y": y},
+            dims=("time", "x", "y"),
+        ),
+    }
+
+    ds = xr.Dataset(data)
+    load_meth = getattr(ds.yt, method)
+    yt_2d = load_meth(
+        fields=[
+            "precip",
+        ],
+        length_unit=1,
+        geometry="cartesian",
+    )
+
+    ad = yt_2d.all_data()
+    assert ad[("stream", "precip")].min() == data["precip"].min()
+
+    slc = yt.SlicePlot(yt_2d, "z", ("stream", "precip"))
+    slc.render()
+
+    with pytest.raises(
+        RuntimeError, match="Trying to load a field with time as a dimension."
+    ):
+        _ = load_meth(
+            fields=[
+                "precip_t",
+            ],
+            length_unit=1,
+            geometry="cartesian",
+        )
+
+    yt_2d = load_meth(
+        fields=[
+            "precip_t",
+        ],
+        length_unit=1,
+        geometry="cartesian",
+        sel_dict={"time": 0},
+    )
+    ad = yt_2d.all_data()
+    assert ad[("stream", "precip_t")].min() == data["precip_t"][0, :].min()
+
+    yt_2d = load_meth(
+        fields=[
+            "precip_t",
+        ],
+        length_unit=1,
+        geometry="cartesian",
+        sel_dict={"time": time[1]},
+        sel_dict_type="sel",
+    )
+    ad = yt_2d.all_data()
+    assert ad[("stream", "precip_t")].min() == data["precip_t"][1, :].min()
+
+
+_expected_geoms = {
+    "cartesian": ("x", "y", "z"),
+    "spherical": ("r", "theta", "phi"),
+    "geographic": ("altitude", "latitude", "longitude"),
+    "internal_geographic": ("depth", "latitude", "longitude"),
+}
+
+
+@pytest.mark.parametrize(
+    "geometry", ["cartesian", "spherical", "geographic", "internal_geographic"]
+)
+def test_finding_3rd_dim(geometry):
+
+    expected = _expected_geoms[geometry]
+    # select any 2, make sure we add the 3rd back. repeat for every permutation
+    choices = list(expected)
+    for axis_pairs in ((0, 1), (0, 2), (1, 2)):
+        axes = [choices[axis_pairs[0]], choices[axis_pairs[1]]]
+        new_axes = xr2yt._add_3rd_axis_name(geometry, axes)
+        assert len(set(new_axes).difference(set(expected))) == 0

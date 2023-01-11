@@ -28,12 +28,13 @@ class Selection:
         fields: List[str] = None,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
+        allow_time_as_dim: Optional[bool] = False,
     ):
 
         self.fields = self._validate_fields(xr_ds, fields)
         self.units: dict = self._find_units(xr_ds)
         self.full_shape = xr_ds.data_vars[self.fields[0]].shape
-
+        self.allow_time_as_dim = allow_time_as_dim
         self.sel_dict = sel_dict or {}
         if sel_dict_type not in ["sel", "isel"]:
             raise RuntimeError(
@@ -49,6 +50,7 @@ class Selection:
         self.selected_coords: Tuple[str] = None
         self.starting_indices: np.ndarray = None
         self.selected_time = None
+        self.ndims = None
         self._process_selection(xr_ds)
 
         self.yt_coord_names = _convert_to_yt_internal_coords(self.selected_coords)
@@ -122,6 +124,7 @@ class Selection:
         full_dimranges = []  # the global min, max
         coord_list = []  # the coord list after selection
         starting_indices = []  # global starting index
+        time_is_a_dim = False
         for c in full_coords:
             coord_da = getattr(xr_ds, c)  # the full coordinate data array
 
@@ -143,6 +146,7 @@ class Selection:
                 shape.append(coord_vals.size)
                 coord_list.append(c)
                 starting_indices.append(si)
+                time_is_a_dim = time_is_a_dim or "time" in c.lower()
             elif coord_vals.size == 1 and "time" in c.lower():
                 # may not be general enough, but it will catch many cases
                 time = coord_vals
@@ -152,7 +156,15 @@ class Selection:
                 f"ndim is {shape}, please provide a sel_dict to"
                 f" reduce dimensionality to 3."
             )
-
+        elif len(shape) == 3 and time_is_a_dim:
+            if self.allow_time_as_dim is False:
+                raise RuntimeError(
+                    "Trying to load a field with time as a dimension."
+                    "Please either provide a seletion dictionary to set a time or"
+                    "set allow_time_as_dim=True if you want to load a 2D spatial "
+                    " field with time as the 3rd dimension (not recommended)."
+                )
+        self.ndims = len(shape)
         self.selected_shape = tuple(shape)
         self.full_bbox = np.array(full_dimranges)
         self.selected_bbox = np.array(dimranges)
@@ -233,6 +245,31 @@ def _determine_yt_geomtype(coord_type: str, coord_list: List[str]) -> Optional[s
         return None
     elif coord_type == "cartesian":
         return "cartesian"
+
+
+def _add_3rd_axis_name(yt_geometry: str, axis_order: list) -> list:
+    if len(axis_order) != 2:
+        raise RuntimeError("This function should only be called for 2d data.")
+
+    axis_set = set(axis_order)
+    if yt_geometry == "cartesian":
+        yt_axes = set(["x", "y", "z"])
+    elif yt_geometry == "spherical":
+        yt_axes = set(["r", "phi", "theta"])
+    elif yt_geometry == "internal_geographic":
+        yt_axes = set(["depth", "latitude", "longitude"])
+    elif yt_geometry == "geographic":
+        yt_axes = set(["altitude", "latitude", "longitude"])
+    else:
+        raise ValueError(f"Unsupported geometry type: {yt_geometry}")
+
+    missing = list(yt_axes.difference(axis_set))
+    if len(missing) == 1:
+        return axis_order + [
+            missing[0],
+        ]
+
+    raise RuntimeError("Could not determine missing coordinate.")
 
 
 def _size_of_array_like(v):
