@@ -159,9 +159,9 @@ class Selection:
         elif len(shape) == 3 and time_is_a_dim:
             if self.allow_time_as_dim is False:
                 raise RuntimeError(
-                    "Trying to load a field with time as a dimension."
+                    "Trying to load a field with time as a dimension. "
                     "Please either provide a seletion dictionary to set a time or"
-                    "set allow_time_as_dim=True if you want to load a 2D spatial "
+                    " set allow_time_as_dim=True if you want to load a 2D spatial "
                     " field with time as the 3rd dimension (not recommended)."
                 )
         self.ndims = len(shape)
@@ -217,19 +217,38 @@ _coord_aliases = {
     "longitude": ["longitude", "lon"],
 }
 
+
 known_coord_aliases = {}
 for ky, vals in _coord_aliases.items():
     for val in vals:
         known_coord_aliases[val] = ky
 
+_expected_yt_axes = {
+    "cartesian": set(["x", "y", "z"]),
+    "spherical": set(["r", "phi", "theta"]),
+    "geographic": set(["altitude", "latitude", "longitude"]),
+    "internal_geographic": set(["depth", "latitude", "longitude"]),
+}
+
+_yt_coord_names = []
+for vals in _expected_yt_axes.values():
+    _yt_coord_names += list(vals)
+
 
 def _convert_to_yt_internal_coords(coord_list):
     yt_coords = []
     for c in coord_list:
-        if c.lower() in known_coord_aliases:
-            yt_coords.append(known_coord_aliases[c.lower()])
+        cname = c.lower()
+        if cname in known_coord_aliases:
+            yt_coords.append(known_coord_aliases[cname])
+        elif cname in _yt_coord_names:
+            yt_coords.append(cname)
         else:
-            yt_coords.append(c)
+            raise ValueError(
+                f"{c} is not a known coordinate. To load in yt, you "
+                f"must supply an alias via the yt_xarray.known_coord_aliases"
+                f" dictionary."
+            )
 
     return yt_coords
 
@@ -252,14 +271,8 @@ def _add_3rd_axis_name(yt_geometry: str, axis_order: list) -> list:
         raise RuntimeError("This function should only be called for 2d data.")
 
     axis_set = set(axis_order)
-    if yt_geometry == "cartesian":
-        yt_axes = set(["x", "y", "z"])
-    elif yt_geometry == "spherical":
-        yt_axes = set(["r", "phi", "theta"])
-    elif yt_geometry == "internal_geographic":
-        yt_axes = set(["depth", "latitude", "longitude"])
-    elif yt_geometry == "geographic":
-        yt_axes = set(["altitude", "latitude", "longitude"])
+    if yt_geometry in _expected_yt_axes.keys():
+        yt_axes = _expected_yt_axes[yt_geometry]
     else:
         raise ValueError(f"Unsupported geometry type: {yt_geometry}")
 

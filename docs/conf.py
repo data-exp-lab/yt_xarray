@@ -35,7 +35,7 @@ import yt_xarray  # noqa: E402
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
-    "sphinx_mdinclude",
+    "nbsphinx",
 ]
 
 # Add any paths that contain templates here, relative to this directory.

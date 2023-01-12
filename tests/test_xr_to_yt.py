@@ -155,6 +155,14 @@ def test_coord_aliasing():
     fld = "test_field"
     ds = xr.Dataset(data_vars={fld: da})
 
+    with pytest.raises(ValueError, match="not a known coordinate"):
+        _ = xr2yt.Selection(
+            ds,
+            [
+                fld,
+            ],
+        )
+
     xr2yt.known_coord_aliases["c1"] = "x"
     xr2yt.known_coord_aliases["c2"] = "y"
     xr2yt.known_coord_aliases["c3"] = "z"
