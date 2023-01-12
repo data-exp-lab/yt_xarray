@@ -11,6 +11,6 @@ recursive-exclude * *.py[co]
 exclude .editorconfig
 
 recursive-include docs *.ipynb
-recursive-exclude docs examples .ipynb_checkpoints/*
+recursive-exclude * .ipynb_checkpoints/*
 recursive-exclude docs/_build *
 recursive-include docs *.rst conf.py Makefile make.bat *.jpg *.png *.gif
