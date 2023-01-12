@@ -214,7 +214,7 @@ class YtAccessor:
         ----------
         fields : list of fields to include. If None, will try to use all fields
         geometry : the geometry to pass to yt.load_uniform grid. If not provided,
-                   will attempt to infer.
+        will attempt to infer.
         kwargs : any additional keyword arguments to pass to yt.load_uniform_grid
 
         Returns
@@ -228,6 +228,7 @@ class YtAccessor:
         in order to read directly from an open xarray handle without creating
         additional in-memory copies of the data.
         """
+
         return self._load_uniform_grid(
             fields=fields,
             geometry=geometry,
@@ -253,7 +254,7 @@ class YtAccessor:
         ----------
         fields : list of fields to include. If None, will try to use all fields
         geometry : the geometry to pass to yt.load_uniform grid. If not provided,
-                   will attempt to infer.
+        will attempt to infer.
         kwargs : any additional keyword arguments to pass to yt.load_uniform_grid
 
         Returns
