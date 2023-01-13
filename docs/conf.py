@@ -35,6 +35,7 @@ import yt_xarray  # noqa: E402
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
+    "sphinx.ext.autosectionlabel",
     "nbsphinx",
 ]
 

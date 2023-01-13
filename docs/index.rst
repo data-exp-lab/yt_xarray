@@ -7,6 +7,8 @@ Welcome to yt_xarray's documentation!
 
    installation
    examples
+   faq
+   memory
    modules
    contributing
 

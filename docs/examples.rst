@@ -14,4 +14,4 @@ These notebooks demonstrate some of the helper methods available in :code:`yt-na
 - Example 001: :doc:`examples/example_001_xr_to_yt`.
 - Example 002: :doc:`examples/example_002_coord_aliases`.
 - Example 003: :doc:`examples/example_003_two_dimensional_fields`
-- Example 005: :doc:`examples/example_004_xr_yt_cartopy`
+- Example 004: :doc:`examples/example_004_xr_yt_cartopy`

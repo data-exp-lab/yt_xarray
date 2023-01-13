@@ -12,5 +12,4 @@ h5py
 scipy
 pytest==6.2.4
 tox
-sphinx-mdinclude
 nbsphinx
