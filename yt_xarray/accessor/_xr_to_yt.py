@@ -230,6 +230,8 @@ _expected_yt_axes = {
     "internal_geographic": set(["depth", "latitude", "longitude"]),
 }
 
+valid_geometries = tuple(_expected_yt_axes.keys()) + ("geodetic",)
+
 _yt_coord_names = []
 for vals in _expected_yt_axes.values():
     _yt_coord_names += list(vals)
@@ -254,6 +256,8 @@ def _convert_to_yt_internal_coords(coord_list):
 
 
 def _determine_yt_geomtype(coord_type: str, coord_list: List[str]) -> Optional[str]:
+    # mainly for expanding geodetic into internal_geographic or geographic as used
+    # by yt
     if coord_type == "geodetic":
         # is it internal or external
         possible_alts = _coord_aliases["altitude"]
@@ -261,9 +265,10 @@ def _determine_yt_geomtype(coord_type: str, coord_list: List[str]) -> Optional[s
             return "internal_geographic"
         elif any([i in coord_list for i in possible_alts]):
             return "geographic"
-        return None
-    elif coord_type == "cartesian":
-        return "cartesian"
+    elif coord_type in _expected_yt_axes.keys():
+        return coord_type
+    else:
+        raise ValueError(f"Unsupported geometry type: {coord_type}")
 
 
 def _add_3rd_axis_name(yt_geometry: str, axis_order: list) -> list:
@@ -291,3 +296,9 @@ def _size_of_array_like(v):
         return v.size
 
     return len(v)
+
+
+def _validate_geometry(possible_geom: str) -> str:
+    if possible_geom in valid_geometries:
+        return possible_geom
+    raise ValueError(f"{possible_geom} is not a valid geometry")

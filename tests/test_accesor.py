@@ -39,11 +39,11 @@ def test_accessor():
         field_name=tfield, n_x=n_x, n_y=n_y, n_z=n_z, coord_order=["x", "y", "z"]
     )
     assert hasattr(ds, "yt")
-    assert ds.yt.coord_type == "geodetic"
+    assert ds.yt.geometry == "geodetic"
     assert all([i in ds.yt._coord_list for i in ds.coords.keys()])
 
     ds = construct_minimal_ds(x_name="x", y_name="y", z_name="z")
-    assert ds.yt.coord_type == "cartesian"
+    assert ds.yt.geometry == "cartesian"
     assert all([i in ds.yt._coord_list for i in ds.coords.keys()])
 
 

@@ -273,3 +273,36 @@ def test_finding_3rd_dim(geometry):
         axes = [choices[axis_pairs[0]], choices[axis_pairs[1]]]
         new_axes = xr2yt._add_3rd_axis_name(geometry, axes)
         assert len(set(new_axes).difference(set(expected))) == 0
+
+
+@pytest.mark.parametrize(
+    "geometry",
+    ["cartesian", "spherical", "geographic", "internal_geographic", "geodetic"],
+)
+def test_geometry(geometry):
+    assert xr2yt._validate_geometry(geometry) == geometry
+
+
+def test_bad_gemoetry():
+    with pytest.raises(ValueError, match="is not a valid geometry"):
+        _ = xr2yt._validate_geometry("this_is_not_a_geom")
+
+
+@pytest.mark.parametrize(
+    "geometry, coord_list, expected",
+    [
+        ("cartesian", ["x", "y", "z"], "cartesian"),
+        ("spherical", ["r", "theta", "phi"], "spherical"),
+        ("geographic", ["r", "theta", "phi"], "geographic"),
+        ("internal_geographic", ["r", "theta", "phi"], "internal_geographic"),
+        ("geodetic", ["latitude", "longitude", "altitude"], "geographic"),
+        ("geodetic", ["latitude", "longitude", "depth"], "internal_geographic"),
+        ("blah", ["x", "y", "z"], "error"),
+    ],
+)
+def test_determine_yt_geomtype(geometry, coord_list, expected):
+    if expected == "error":
+        with pytest.raises(ValueError, match="Unsupported geometry type"):
+            _ = xr2yt._determine_yt_geomtype(geometry, coord_list)
+    else:
+        assert xr2yt._determine_yt_geomtype(geometry, coord_list) == expected

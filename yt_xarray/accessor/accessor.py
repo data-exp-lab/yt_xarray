@@ -7,7 +7,6 @@ import yt
 from unyt import unyt_quantity
 
 from yt_xarray.accessor import _xr_to_yt
-from yt_xarray.accessor._xr_to_yt import _add_3rd_axis_name, _determine_yt_geomtype
 
 
 @xr.register_dataset_accessor("yt")
@@ -43,12 +42,13 @@ class YtAccessor:
         )
 
         if geometry is None:
-            geometry = _determine_yt_geomtype(self.coord_type, sel_info.selected_coords)
-            if geometry is None:
-                raise ValueError(
-                    "Cannot determine yt geometry type, please provide"
-                    "geometry = 'geographic', 'internal_geopgraphic' or 'cartesian'"
-                )
+            geometry = self.geometry
+        geometry = _xr_to_yt._determine_yt_geomtype(geometry, sel_info.selected_coords)
+        if geometry is None:
+            raise ValueError(
+                "Cannot determine yt geometry type, please provide"
+                "geometry = 'geographic', 'internal_geopgraphic' or 'cartesian'"
+            )
 
         # need to possibly account for stretched grid here... or at
         # least check for it and raise an error...
@@ -80,7 +80,7 @@ class YtAccessor:
         bbox = sel_info.selected_bbox
         if sel_info.ndims == 2:
             axis_order = geom[1]
-            axis_order = _add_3rd_axis_name(geom[0], axis_order)
+            axis_order = _xr_to_yt._add_3rd_axis_name(geom[0], axis_order)
             geom = (geom[0], axis_order)
             data_shp = data_shp + (1,)
             bbox = np.vstack([bbox, [0, 1]])
@@ -272,25 +272,37 @@ class YtAccessor:
         )
 
     def _infer_length_unit(self):
-        if self.coord_type == "geodetic":
+        if self.geometry == "geodetic":
             return 1
         elif hasattr(self._obj, "geospatial_vertical_units"):
             # some netcdf conventions have this!
             return self._obj.geospatial_vertical_units
         return None
 
-    _coord_type = None
+    _geometry = None
 
-    def set_coordinate_type(self, coordinate_type: str):
-        self._coord_type = coordinate_type
+    def set_geometry(self, geometry: str):
+        """
+        Set the geometry for the dataset.
+
+        Parameters
+        ----------
+
+        geometry: str
+        the dataset's coordinate type. See yt_xarray.valid_geometries
+        for possible values.
+
+        """
+
+        self._geometry = _xr_to_yt._validate_geometry(geometry)
 
     @property
-    def coord_type(self) -> str:
-        if self._coord_type is None:
-            self._coord_type = self._infer_coordinate_type()
-        return self._coord_type
+    def geometry(self) -> str:
+        if self._geometry is None:
+            self._geometry = self._infer_geometry()
+        return self._geometry
 
-    def _infer_coordinate_type(self) -> str:
+    def _infer_geometry(self) -> str:
         # try to infer if we have a geodetic dataset. the differentiation
         # between internal and not used by yt (internal_geographic vs geographic)
         # is not applied here, but is when converting to a yt dataset (see
@@ -302,8 +314,10 @@ class YtAccessor:
         for coord in list(self._obj.coords):
             if coord.lower() in geodetic_names:
                 ctype = "geodetic"
+
+        # TODO: logging here.
         print(
-            f"Inferred coordinate type is {ctype} -- to override, use ds.yt.set_coordinate_type"
+            f"Inferred geometry type is {ctype} -- to override, use ds.yt.set_geometry"
         )
         return ctype
 
