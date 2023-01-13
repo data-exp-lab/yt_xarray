@@ -5,13 +5,11 @@ Welcome to yt_xarray's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-   readme
    installation
-   usage
+   examples
+   faq
    modules
    contributing
-   authors
-   history
 
 Indices and tables
 ==================

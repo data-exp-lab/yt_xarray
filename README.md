@@ -4,14 +4,38 @@
 [![PyPI version](https://badge.fury.io/py/yt_xarray.svg)](https://badge.fury.io/py/yt_xarray)
 
 
-interfaces between yt and xarray
+An interface between yt and xarray
 
 
-## Features
+## Overview
 
-This is an experimental package for improving the exhange of data between yt
-and xarray. The primary access point is the `YtAccessor` object for xarray. To
-use it, simply import the package and the `.yt` object will be available to
+yt_xarray streamlines communication between
+[xarray](https://docs.xarray.dev/en/stable/#) and [yt](https://yt-project.org),
+making it easier use yt's visualization and analysis methods with data loaded
+via xarray.
+
+Presently, yt_xarray primarily adds methods to generate a yt dataset from a
+subset of xarray dataset fields, without making copies of data when possible.
+
+For a more detailed description, check out the full documentation at
+[https://yt-xarray.readthedocs.io](https://yt-xarray.readthedocs.io/en/latest/).
+
+## Quick Start
+
+### Installation
+
+The latest stable version can be installed using `pip` with:
+
+```commandline
+$ pip install yt_xarray
+```
+
+This will install both xarray and yt if you are missing one or the other.
+
+### Usage
+
+The main access point is the `YtAccessor` object for xarray. To
+use it, simply import `yt_xarray` and the `.yt` object will be available to
 xarray datasets. For example, to convert the xarray dataset into a full-fledged
 yt dataset:
 
@@ -22,20 +46,26 @@ import yt_xarray
 ds = xr.open_dataset(...)
 yt_ds = ds.yt.ds()
 ```
-In this example, `ds.yt.ds()` returns a yt dataset built using the new (as of
-yt 4.1.0) callable functionality to reference the open xarray ds handle. See
-the [example notebooks](https://github.com/data-exp-lab/yt_xarray/tree/main/examples)
-for more approaches.
+In this example, `ds.yt.ds()` returns a yt dataset using all of the fields in
+the xarray dataset, ready to use with any yt command. This will, however, only
+work if all of your data is defined on the same grid using coordinate names that
+yt understands. So for more complex cases, see the [example notebooks](https://yt-xarray.readthedocs.io/en/latest/examples.html)
+and the [FAQ](https://yt-xarray.readthedocs.io/en/latest/examples.html) on how
+to handle those cases.
 
-## Limitations
+## Examples
 
-There are many known (and likely unknown) limitations, here are the most pressing:
-* 3D variables are required for yt functionality
-* If you have variables on different grids, you must specify the variables you want to load in yt.
-* Geometry: the beta version was built using sample domain data from seismology, so there are likely lingering assumptions...
+Check out the [example notebooks](https://yt-xarray.readthedocs.io/en/latest/examples.html)
+and the [FAQ](https://yt-xarray.readthedocs.io/en/latest/examples.html) for examples and
+descriptions of common issues.
 
-If you try it out and find any issues, please report via [github](https://github.com/data-exp-lab/yt_xarray/issues).
+## Getting Help
 
+Bug reports and questions are welcome via [github issues](https://github.com/data-exp-lab/yt_xarray/issues).
+You can also reach out via the yt slack channel
+([see here for how to join](https://yt-project.org/community.html)) by messaging
+Chris Havlin directly or posting in help (though you should tag @Chris Havlin in
+your post to get a faster response.)
 
 ## Contributions
 
