@@ -16,7 +16,8 @@ same dimensionality. So keep in mind that for most of the functionality here, yo
 to provide subsets of fields that you want to work with. For variables with time dimensions,
 you will generally have to provide a timestep to load.
 
-See the example HERE for a detailed example.
+See :doc:`examples/example_001_xr_to_yt` and :doc:`examples/example_003_two_dimensional_fields`
+for examples.
 
 unknown coordinate names
 ************************
@@ -27,7 +28,7 @@ the coordinate names are ``'latitude'``, ``'longtiude'`` and then either ``'alti
 or ``'depth'``. To work with xarray variables defined with coordinate names that
 differ from these, yt_xarray provides some coordinate aliasing.
 
-See HERE for an example.
+See :doc:`examples/example_002_coord_aliases` for an example.
 
 unknown coordinate systems
 **************************

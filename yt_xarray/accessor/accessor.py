@@ -12,7 +12,6 @@ from yt_xarray.accessor import _xr_to_yt
 @xr.register_dataset_accessor("yt")
 class YtAccessor:
     def __init__(self, xarray_obj):
-        # __init__ can ONLY have xarray_obj here
         self._obj = xarray_obj
         self._bbox_cart = {}
         self._bbox = {}
@@ -298,6 +297,7 @@ class YtAccessor:
 
     @property
     def geometry(self) -> str:
+        """the dataset geometry"""
         if self._geometry is None:
             self._geometry = self._infer_geometry()
         return self._geometry
@@ -322,7 +322,7 @@ class YtAccessor:
         return ctype
 
     def ds(self):
-        """try to return a yt dataset with all data fields"""
+        """return a yt dataset with all data fields"""
         return self.load_grid_from_callable()
 
     @property
