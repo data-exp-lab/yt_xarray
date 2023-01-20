@@ -53,9 +53,6 @@ class YtAccessor:
                 "geometry = 'geographic', 'internal_geopgraphic' or 'cartesian'"
             )
 
-        # need to possibly account for stretched grid here... or at
-        # least check for it and raise an error...
-
         if "length_unit" in kwargs:
             length_unit = kwargs.pop("length_unit")
         else:
@@ -182,7 +179,6 @@ class YtAccessor:
             )
 
         else:
-            # should account for stretched grid here?
             data = {}
 
             for field in fields:
