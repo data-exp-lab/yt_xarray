@@ -1,4 +1,5 @@
 import collections.abc
+import enum
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -50,7 +51,8 @@ class Selection:
         self.selected_coords: Tuple[str] = None
         self.starting_indices: np.ndarray = None
         self.selected_time = None
-        self.ndims = None
+        self.ndims: int = None
+        self.grid_type = None  # one of _GridType members
         self._process_selection(xr_ds)
 
         self.yt_coord_names = _convert_to_yt_internal_coords(self.selected_coords)
@@ -124,11 +126,12 @@ class Selection:
         full_dimranges = []  # the global min, max
         coord_list = []  # the coord list after selection
         starting_indices = []  # global starting index
-        time_is_a_dim = False
+
+        grid_type = _GridType.UNIFORM  # start with uniform assumption
         for c in full_coords:
             coord_da = getattr(xr_ds, c)  # the full coordinate data array
 
-            # store the global
+            # store the global ranges
             global_min = float(coord_da.min().values)
             global_max = float(coord_da.max().values)
             full_dimranges.append([global_min, global_max])
@@ -141,29 +144,34 @@ class Selection:
 
             sel_or_isel = getattr(coord_da, self.sel_dict_type)
             coord_vals = sel_or_isel(coord_select).values
+            is_time_dim = _check_for_time(c, coord_vals)
+
             if coord_vals.size > 1:
                 dimranges.append([coord_vals.min(), coord_vals.max()])
                 shape.append(coord_vals.size)
                 coord_list.append(c)
                 starting_indices.append(si)
-                time_is_a_dim = time_is_a_dim or "time" in c.lower()
-            elif coord_vals.size == 1 and "time" in c.lower():
-                # may not be general enough, but it will catch many cases
+
+                if is_time_dim:
+                    raise NotImplementedError(
+                        "Loading data with time as a dimension is not currently"
+                        " supported. Please provide a selection dictionary to "
+                        "select a single time to load."
+                    )
+                else:
+                    # check if this dimension is a stretched grid. If it is, the
+                    # grid will be treated as stretched.
+                    if _check_grid_stretchiness(coord_vals) == _GridType.STRETCHED:
+                        grid_type = _GridType.STRETCHED
+
+            elif coord_vals.size == 1 and is_time_dim:
                 time = coord_vals
 
         if len(shape) > 3:
             raise ValueError(
-                f"ndim is {shape}, please provide a sel_dict to"
+                f"ndim is {len(shape)}, please provide a sel_dict to"
                 f" reduce dimensionality to 3."
             )
-        elif len(shape) == 3 and time_is_a_dim:
-            if self.allow_time_as_dim is False:
-                raise RuntimeError(
-                    "Trying to load a field with time as a dimension. "
-                    "Please either provide a seletion dictionary to set a time or"
-                    " set allow_time_as_dim=True if you want to load a 2D spatial "
-                    " field with time as the 3rd dimension (not recommended)."
-                )
         self.ndims = len(shape)
         self.selected_shape = tuple(shape)
         self.full_bbox = np.array(full_dimranges)
@@ -172,6 +180,7 @@ class Selection:
         self.selected_coords = tuple(coord_list)
         self.starting_indices = np.array(starting_indices)
         self.selected_time = time
+        self.grid_type = grid_type
 
         self.grid_dict = {
             "left_edge": self.selected_bbox[:, 0],
@@ -302,3 +311,22 @@ def _validate_geometry(possible_geom: str) -> str:
     if possible_geom in valid_geometries:
         return possible_geom
     raise ValueError(f"{possible_geom} is not a valid geometry")
+
+
+class _GridType(enum.Flag):
+    UNIFORM = enum.auto()
+    STRETCHED = enum.auto()
+    UNKNOWN = enum.auto()
+
+
+def _check_grid_stretchiness(x):
+    dx = np.unique(x[1:] - x[:-1])
+    grid_tol = 1e-10  # could be a user setting
+    if np.allclose(dx, [dx[0]], grid_tol):
+        return _GridType.UNIFORM
+    else:
+        return _GridType.STRETCHED
+
+
+def _check_for_time(dim_name, dim_vals: np.ndarray):
+    return "time" in dim_name.lower() or type(dim_vals) is np.datetime64

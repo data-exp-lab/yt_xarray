@@ -5,7 +5,7 @@ import xarray as xr
 import yt_xarray  # noqa: F401
 from yt_xarray._utilities import (
     _get_test_coord,
-    construct_ds_with_time,
+    construct_ds_with_extra_dim,
     construct_minimal_ds,
 )
 
@@ -148,11 +148,14 @@ def test_yt_ds_attr(ds_xr):
 @pytest.mark.parametrize("method", ("load_uniform_grid", "load_grid_from_callable"))
 @pytest.mark.parametrize("coord_set", range(5))
 def test_time_reduction(coord_set, method):
-    ds = construct_ds_with_time(coord_set)
+    ds = construct_ds_with_extra_dim(coord_set)
     flds = list(ds.data_vars)
 
     loader = getattr(ds.yt, method)
-    with pytest.raises(ValueError, match=r".* reduce dimensionality .*"):
+    with pytest.raises(
+        NotImplementedError,
+        match="Loading data with time as a dimension is not currently",
+    ):
         _ = loader(flds, length_unit="km")
 
     ds_yt = loader(flds, length_unit="km", sel_dict={"time": 0})
@@ -182,3 +185,21 @@ def test_geom_kwarg(ds_xr):
     # make sure we can specify the geometry
     flds = ["a_new_field_0", "a_new_field_1"]
     _ = ds_xr.yt.load_uniform_grid(fields=flds, geometry="cartesian")
+
+
+def test_stretched_grid():
+    ds = construct_minimal_ds(
+        x_stretched=False,
+        x_name="x",
+        y_stretched=True,
+        y_name="y",
+        z_stretched=True,
+        z_name="z",
+    )
+
+    with pytest.raises(NotImplementedError, match="Detected a stretched grid"):
+        _ = ds.yt.load_uniform_grid(
+            fields=[
+                "test_field",
+            ]
+        )

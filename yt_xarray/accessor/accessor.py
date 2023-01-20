@@ -39,6 +39,10 @@ class YtAccessor:
             sel_dict_type=sel_dict_type,
             allow_time_as_dim=allow_time_as_dim,
         )
+        if sel_info.grid_type == _xr_to_yt._GridType.STRETCHED:
+            raise NotImplementedError(
+                "Detected a stretched grid, which is not yet supported."
+            )
 
         if geometry is None:
             geometry = self.geometry

@@ -6,7 +6,7 @@ import yt
 import yt_xarray.accessor._xr_to_yt as xr2yt
 from yt_xarray._utilities import (
     _get_test_coord,
-    construct_ds_with_time,
+    construct_ds_with_extra_dim,
     construct_minimal_ds,
 )
 
@@ -130,9 +130,12 @@ def test_selection_sel(ds_xr, coord):
 
 @pytest.mark.parametrize("coord_set", range(5))
 def test_time_reduction(coord_set):
-    ds = construct_ds_with_time(coord_set)
+    ds = construct_ds_with_extra_dim(coord_set)
 
-    with pytest.raises(ValueError, match=r".* reduce dimensionality .*"):
+    with pytest.raises(
+        NotImplementedError,
+        match="Loading data with time as a dimension is not currently",
+    ):
         _ = xr2yt.Selection(ds, list(ds.data_vars))
 
     sel = xr2yt.Selection(ds, list(ds.data_vars), sel_dict={"time": 0})
@@ -142,6 +145,15 @@ def test_time_reduction(coord_set):
     sel = xr2yt.Selection(
         ds, list(ds.data_vars), sel_dict={"time": timetoselect}, sel_dict_type="sel"
     )
+    assert len(sel.selected_shape) == 3
+
+
+def test_dimension_reduction():
+    ds = construct_ds_with_extra_dim(0, dim_name="eta")
+    with pytest.raises(ValueError, match="ndim is 4"):
+        _ = xr2yt.Selection(ds, list(ds.data_vars))
+
+    sel = xr2yt.Selection(ds, list(ds.data_vars), sel_dict={"eta": 0})
     assert len(sel.selected_shape) == 3
 
 
@@ -219,7 +231,8 @@ def test_two_dimensional(method):
     slc.render()
 
     with pytest.raises(
-        RuntimeError, match="Trying to load a field with time as a dimension."
+        NotImplementedError,
+        match="Loading data with time as a dimension is not currently",
     ):
         _ = load_meth(
             fields=[
@@ -306,3 +319,29 @@ def test_determine_yt_geomtype(geometry, coord_list, expected):
             _ = xr2yt._determine_yt_geomtype(geometry, coord_list)
     else:
         assert xr2yt._determine_yt_geomtype(geometry, coord_list) == expected
+
+
+@pytest.mark.parametrize(
+    "input_dim, expected_type",
+    (
+        (np.arange(0, 10), xr2yt._GridType.UNIFORM),
+        (np.linspace(0, 10, 9), xr2yt._GridType.UNIFORM),
+        (np.array([1.0, 2.0, 2.3, 3.5]), xr2yt._GridType.STRETCHED),
+        (np.linspace(0, 10, 3) + np.array([0.0, 0.0, 1e-15]), xr2yt._GridType.UNIFORM),
+        (np.linspace(0, 10, 3) + np.array([0.0, 0.0, 1e-7]), xr2yt._GridType.STRETCHED),
+    ),
+)
+def test_grid_type(input_dim, expected_type):
+    assert xr2yt._check_grid_stretchiness(input_dim) == expected_type
+
+
+@pytest.mark.parametrize(
+    "dim_name, dim_vals, expected",
+    (
+        ("x", np.array([1]), False),
+        ("x", np.datetime64("2001-01-02").astype("datetime64[ns]"), True),
+        ("TiMe", np.array([1]), True),
+    ),
+)
+def test_time_check(dim_name, dim_vals, expected):
+    assert xr2yt._check_for_time(dim_name, dim_vals) is expected
