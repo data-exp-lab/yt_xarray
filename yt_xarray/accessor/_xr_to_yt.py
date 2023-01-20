@@ -29,13 +29,11 @@ class Selection:
         fields: List[str] = None,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
-        allow_time_as_dim: Optional[bool] = False,
     ):
 
         self.fields = self._validate_fields(xr_ds, fields)
         self.units: dict = self._find_units(xr_ds)
         self.full_shape = xr_ds.data_vars[self.fields[0]].shape
-        self.allow_time_as_dim = allow_time_as_dim
         self.sel_dict = sel_dict or {}
         if sel_dict_type not in ["sel", "isel"]:
             raise RuntimeError(
