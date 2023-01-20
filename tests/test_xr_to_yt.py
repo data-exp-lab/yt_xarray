@@ -191,8 +191,8 @@ def test_coord_aliasing():
         assert c in sel.yt_coord_names
 
 
-@pytest.mark.parametrize("method", ["load_grid_from_callable", "load_uniform_grid"])
-def test_two_dimensional(method):
+@pytest.mark.parametrize("use_callable", [True, False])
+def test_two_dimensional(use_callable):
     x = np.linspace(0, 1, 16)
     y = np.linspace(0, 1, 16)
     z = np.linspace(0, 1, 16)
@@ -215,13 +215,13 @@ def test_two_dimensional(method):
     }
 
     ds = xr.Dataset(data)
-    load_meth = getattr(ds.yt, method)
-    yt_2d = load_meth(
+    yt_2d = ds.yt.load_grid(
         fields=[
             "precip",
         ],
         length_unit=1,
         geometry="cartesian",
+        use_callable=use_callable,
     )
 
     ad = yt_2d.all_data()
@@ -234,26 +234,28 @@ def test_two_dimensional(method):
         NotImplementedError,
         match="Loading data with time as a dimension is not currently",
     ):
-        _ = load_meth(
+        _ = ds.yt.load_grid(
             fields=[
                 "precip_t",
             ],
             length_unit=1,
             geometry="cartesian",
+            use_callable=use_callable,
         )
 
-    yt_2d = load_meth(
+    yt_2d = ds.yt.load_grid(
         fields=[
             "precip_t",
         ],
         length_unit=1,
         geometry="cartesian",
         sel_dict={"time": 0},
+        use_callable=use_callable,
     )
     ad = yt_2d.all_data()
     assert ad[("stream", "precip_t")].min() == data["precip_t"][0, :].min()
 
-    yt_2d = load_meth(
+    yt_2d = ds.yt.load_grid(
         fields=[
             "precip_t",
         ],
@@ -261,6 +263,7 @@ def test_two_dimensional(method):
         geometry="cartesian",
         sel_dict={"time": time[1]},
         sel_dict_type="sel",
+        use_callable=use_callable,
     )
     ad = yt_2d.all_data()
     assert ad[("stream", "precip_t")].min() == data["precip_t"][1, :].min()

@@ -79,17 +79,16 @@ def test_bbox():
     assert np.all(expected == bbox)
 
 
-@pytest.mark.parametrize("method", ("load_uniform_grid", "load_grid_from_callable"))
-def test_load_uniform_grid(ds_xr, method):
+@pytest.mark.parametrize("use_callable", (True, False))
+def test_load_grid(ds_xr, use_callable):
 
     flds = ["a_new_field_0", "a_new_field_1"]
-    ds_yt = ds_xr.yt.load_uniform_grid(flds)
+    ds_yt = ds_xr.yt.load_grid(flds, use_callable=use_callable)
     assert ds_yt.coordinates.name == "internal_geographic"
     expected_field_list = [("stream", f) for f in flds]
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
-    loader = getattr(ds_xr.yt, method)
-    ds_yt = loader()  # should generate a ds with all fields
+    ds_yt = ds_xr.yt.load_grid(use_callable=use_callable)
     flds = flds + [
         "a_new_field_2",
     ]
@@ -107,8 +106,7 @@ def test_load_uniform_grid(ds_xr, method):
         z_name="altitude",
         coord_order=["z", "y", "x"],
     )
-    loader = getattr(ds.yt, method)
-    ds_yt = loader()
+    ds_yt = ds.yt.load_grid(use_callable=use_callable)
     assert ds_yt.coordinates.name == "geographic"
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
@@ -126,8 +124,7 @@ def test_load_uniform_grid(ds_xr, method):
     flds = [
         tfield + "_0",
     ]
-    loader = getattr(ds.yt, method)
-    ds_yt = loader(flds, length_unit="km")
+    ds_yt = ds.yt.load_grid(use_callable=use_callable, length_unit="km")
     assert ds_yt.coordinates.name == "cartesian"
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
@@ -135,30 +132,21 @@ def test_load_uniform_grid(ds_xr, method):
     assert len(f) == ds.data_vars[flds[0]].size
 
 
-def test_yt_ds_attr(ds_xr):
-    ds = ds_xr.yt.ds()
-    flds = list(ds_xr.data_vars)
-    for fld in flds:
-        assert ("stream", fld) in ds.field_list
-
-    f = ds.all_data()[flds[0]]
-    assert len(f) == ds_xr.data_vars[flds[0]].size
-
-
-@pytest.mark.parametrize("method", ("load_uniform_grid", "load_grid_from_callable"))
+@pytest.mark.parametrize("use_callable", (True, False))
 @pytest.mark.parametrize("coord_set", range(5))
-def test_time_reduction(coord_set, method):
+def test_time_reduction(coord_set, use_callable):
     ds = construct_ds_with_extra_dim(coord_set)
     flds = list(ds.data_vars)
 
-    loader = getattr(ds.yt, method)
     with pytest.raises(
         NotImplementedError,
         match="Loading data with time as a dimension is not currently",
     ):
-        _ = loader(flds, length_unit="km")
+        _ = ds.yt.load_grid(flds, length_unit="km", use_callable=use_callable)
 
-    ds_yt = loader(flds, length_unit="km", sel_dict={"time": 0})
+    ds_yt = ds.yt.load_grid(
+        flds, length_unit="km", use_callable=use_callable, sel_dict={"time": 0}
+    )
     f = ds_yt.all_data()[("stream", flds[0])]
     assert len(f) == ds.data_vars[flds[0]].isel({"time": 0}).size
     assert ds_yt.current_time == float(ds.time[0].values)
@@ -176,7 +164,7 @@ def test_coord_aliasing():
     yt_xarray.known_coord_aliases["b1"] = "z"
     yt_xarray.known_coord_aliases["b2"] = "y"
     yt_xarray.known_coord_aliases["b3"] = "x"
-    ds_yt = ds.yt.load_uniform_grid([fld], length_unit="km")
+    ds_yt = ds.yt.load_grid([fld], length_unit="km")
     f = ds_yt.all_data()[("stream", fld)]
     assert len(f) == ds.data_vars[fld].size
 
@@ -184,7 +172,7 @@ def test_coord_aliasing():
 def test_geom_kwarg(ds_xr):
     # make sure we can specify the geometry
     flds = ["a_new_field_0", "a_new_field_1"]
-    _ = ds_xr.yt.load_uniform_grid(fields=flds, geometry="cartesian")
+    _ = ds_xr.yt.load_grid(fields=flds, geometry="cartesian")
 
 
 def test_stretched_grid():
@@ -198,7 +186,7 @@ def test_stretched_grid():
     )
 
     with pytest.raises(NotImplementedError, match="Detected a stretched grid"):
-        _ = ds.yt.load_uniform_grid(
+        _ = ds.yt.load_grid(
             fields=[
                 "test_field",
             ]

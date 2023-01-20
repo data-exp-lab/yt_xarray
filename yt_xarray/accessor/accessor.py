@@ -65,16 +65,47 @@ class YtAccessor:
         self._bbox = {}
         self._field_grids = defaultdict(lambda: None)
 
-    def _load_uniform_grid(
+    def load_grid(
         self,
         fields: Optional[List[str]] = None,
-        geometry=None,
-        use_callable=True,
+        geometry: str = None,
+        use_callable: bool = True,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
         **kwargs,
     ):
+        """
+        Initializes a yt gridded dataset for the supplied fields.
 
+        Parameters
+        ----------
+        fields : list[str]
+        list of fields to include. If None, will try to use all fields
+
+        geometry : str
+        the geometry to pass to yt.load_uniform grid. If not provided,
+        will attempt to infer.
+
+        use_callable : bool
+        if True (default), then the yt dataset will utilize links to the open
+        xarray Dataset handle to avoid copying memory.
+
+        sel_dict: dict
+        an optional selection dictionary to apply to the fields before yt dataset
+        initialization
+
+        sel_dict_type: str
+        either "isel" (default) or "sel" to indicate index or value selection for
+        sel_dict.
+
+        kwargs :
+        any additional keyword arguments to pass to yt.load_uniform_grid
+
+        Returns
+        -------
+        yt StreamDataset
+
+        """
         if fields is None:
             # might as well try!
             fields = list(self._obj.data_vars)
@@ -164,75 +195,6 @@ class YtAccessor:
             **kwargs,
         )
 
-    def load_grid_from_callable(
-        self,
-        fields: Optional[List[str]] = None,
-        geometry=None,
-        sel_dict: Optional[dict] = None,
-        sel_dict_type: Optional[str] = "isel",
-        **kwargs,
-    ):
-        """
-        returns a uniform grid yt dataset linked to the open xarray handle.
-
-        Parameters
-        ----------
-        fields : list of fields to include. If None, will try to use all fields
-        geometry : the geometry to pass to yt.load_uniform grid. If not provided,
-        will attempt to infer.
-        kwargs : any additional keyword arguments to pass to yt.load_uniform_grid
-
-        Returns
-        -------
-        yt StreamDataset
-
-        Notes
-        -----
-
-        This function relies on the stream callable functionality in yt>=4.1.0
-        in order to read directly from an open xarray handle without creating
-        additional in-memory copies of the data.
-        """
-
-        return self._load_uniform_grid(
-            fields=fields,
-            geometry=geometry,
-            sel_dict=sel_dict,
-            sel_dict_type=sel_dict_type,
-            **kwargs,
-        )
-
-    def load_uniform_grid(
-        self,
-        fields: Optional[List[str]] = None,
-        geometry: Optional[str] = None,
-        sel_dict: Optional[dict] = None,
-        sel_dict_type: Optional[str] = "isel",
-        **kwargs,
-    ):
-        """
-        return an in-memory uniform grid yt dataset
-
-        Parameters
-        ----------
-        fields : list of fields to include. If None, will try to use all fields
-        geometry : the geometry to pass to yt.load_uniform grid. If not provided,
-        will attempt to infer.
-        kwargs : any additional keyword arguments to pass to yt.load_uniform_grid
-
-        Returns
-        -------
-        yt StreamDataset
-        """
-        return self._load_uniform_grid(
-            fields=fields,
-            geometry=geometry,
-            use_callable=False,
-            sel_dict=sel_dict,
-            sel_dict_type=sel_dict_type,
-            **kwargs,
-        )
-
     def _infer_length_unit(self):
         if self.geometry == "geodetic":
             return 1
@@ -283,10 +245,6 @@ class YtAccessor:
             f"Inferred geometry type is {ctype} -- to override, use ds.yt.set_geometry"
         )
         return ctype
-
-    def ds(self):
-        """return a yt dataset with all data fields"""
-        return self.load_grid_from_callable()
 
     @property
     def _coord_list(self):
