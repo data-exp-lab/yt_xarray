@@ -12,6 +12,14 @@ Subpackages
 Submodules
 ----------
 
+yt\_xarray.logging module
+-------------------------
+
+.. automodule:: yt_xarray.logging
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 yt\_xarray.sample\_data module
 ------------------------------
 

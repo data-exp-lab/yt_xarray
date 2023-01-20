@@ -81,26 +81,26 @@ class YtAccessor:
         Parameters
         ----------
         fields : list[str]
-        list of fields to include. If None, will try to use all fields
+            list of fields to include. If None, will try to use all fields
 
         geometry : str
-        the geometry to pass to yt.load_uniform grid. If not provided,
-        will attempt to infer.
+            the geometry to pass to yt.load_uniform grid. If not provided,
+            will attempt to infer.
 
         use_callable : bool
-        if True (default), then the yt dataset will utilize links to the open
-        xarray Dataset handle to avoid copying memory.
+            if True (default), then the yt dataset will utilize links to the open
+            xarray Dataset handle to avoid copying memory.
 
         sel_dict: dict
-        an optional selection dictionary to apply to the fields before yt dataset
-        initialization
+            an optional selection dictionary to apply to the fields before yt dataset
+            initialization
 
         sel_dict_type: str
-        either "isel" (default) or "sel" to indicate index or value selection for
-        sel_dict.
+            either "isel" (default) or "sel" to indicate index or value selection for
+            sel_dict.
 
         kwargs :
-        any additional keyword arguments to pass to yt.load_uniform_grid
+            any additional keyword arguments to pass to yt.load_uniform_grid
 
         Returns
         -------
