@@ -12,5 +12,5 @@ netCDF4
 h5py
 scipy
 pytest==6.2.4
-tox
+pytest-cov
 nbsphinx
