@@ -7,6 +7,7 @@ import yt
 from unyt import unyt_quantity
 
 from yt_xarray.accessor import _xr_to_yt
+from yt_xarray.logging import ytxr_log
 
 
 def _get_xarray_reader(handle, sel_info: _xr_to_yt.Selection):
@@ -240,9 +241,8 @@ class YtAccessor:
             if coord.lower() in geodetic_names:
                 ctype = "geodetic"
 
-        # TODO: logging here.
-        print(
-            f"Inferred geometry type is {ctype} -- to override, use ds.yt.set_geometry"
+        ytxr_log.info(
+            f"Inferred geometry type is {ctype}. To override, use ds.yt.set_geometry"
         )
         return ctype
 
