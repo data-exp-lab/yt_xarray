@@ -18,6 +18,9 @@ def test_load_random_xr_data():
     for field in fields.keys():
         assert hasattr(ds, field)
 
+    ds = load_random_xr_data(fields, dims, length_unit="km")
+    assert ds.attrs["geospatial_vertical_units"] == "km"
+
 
 def test_load_random_xr_data_bad():
 

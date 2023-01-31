@@ -99,6 +99,73 @@ def test_selection_isel(ds_xr, coord):
     assert len(sel.selected_shape) == 2
     assert coord not in sel.selected_coords
 
+    with pytest.raises(RuntimeError, match="sel_dict_type must be"):
+        _ = xr2yt.Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type="bad")
+
+
+def test_selection_units():
+    x = np.linspace(0, 1, 5)
+    y = np.linspace(0, 1, 5)
+    z = np.linspace(0, 1, 5)
+
+    shp = (x.size, y.size, z.size)
+    dvals = np.random.rand(*shp)
+    cdict = {"x": x, "y": y, "z": z}
+    dim = ("x", "y", "z")
+    data = {
+        "temp": xr.DataArray(dvals, coords=cdict, dims=dim, attrs={"units": "K"}),
+        "flips": xr.DataArray(dvals, coords=cdict, dims=dim, attrs={"units": "smoots"}),
+        "P": xr.DataArray(dvals, coords=cdict, dims=dim, attrs={"units": "MPa"}),
+    }
+
+    ds = xr.Dataset(data)
+    ds_yt = ds.yt.load_grid(geometry="cartesian", length_unit="m")
+    _ = ds_yt.field_list
+    for fld in ("temp", "P"):
+        finfo = ds_yt.field_info[("stream", fld)]
+        assert finfo.units == ds.data_vars[fld].units
+
+    assert ds_yt.field_info[("stream", "flips")].units == ""
+
+
+def test_selection_errors(ds_xr):
+
+    coord = "latitude"
+    sel_dict = {coord: slice(1, len(ds_xr.coords[coord]))}
+    sel_dict_type = "isel"
+    with pytest.raises(ValueError, match="Please provide a list of fields"):
+        _ = xr2yt.Selection(ds_xr, None, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
+
+    x = np.linspace(0, 1, 5)
+    y = np.linspace(0, 1, 6)
+    yy = np.linspace(0, 1, 6)
+    z = np.linspace(0, 1, 4)
+
+    shp = (x.size, y.size, z.size)
+
+    T1 = xr.DataArray(
+        np.random.rand(*shp), coords={"x": x, "y": y, "z": z}, dims=("x", "y", "z")
+    )
+    T2 = xr.DataArray(
+        np.random.rand(*shp[:-1]), coords={"x": x, "y": y}, dims=("x", "y")
+    )
+    T3 = xr.DataArray(
+        np.random.rand(*shp[:-1]), coords={"x": x, "yy": yy}, dims=("x", "yy")
+    )
+    data = {
+        "T1": T1,
+        "T2": T2,
+        "T3": T3,
+    }
+    ds = xr.Dataset(data)
+    flds = ["T1", "T2"]
+    with pytest.raises(RuntimeError, match="does not match"):
+        _ = xr2yt.Selection(ds, flds)
+
+    flds = ["T2", "T3"]
+    with pytest.raises(RuntimeError, match="coordinates : "):
+        _ = xr2yt.Selection(ds, flds)
+
 
 @pytest.mark.parametrize("coord", ("latitude", "longitude", "depth"))
 def test_selection_sel(ds_xr, coord):
@@ -360,6 +427,8 @@ def test_time_check(dim_name, dim_vals, expected):
         ("cartesian", False, False),
         ("cartesian", True, True),
         ("geographic", False, True),
+        ("internal_geographic", False, True),
+        ("not_a_geometry", False, True),
     ],
 )
 def test_selection_interp_validation(geometry, stretched, interp_required):
@@ -370,6 +439,8 @@ def test_selection_interp_validation(geometry, stretched, interp_required):
         dim_names = ("longitude", "latitude", "altitude")
     elif geometry == "internal_geographic":
         dim_names = ("longitude", "latitude", "depth")
+    else:
+        dim_names = ("x", "y", "z")
 
     ds = construct_minimal_ds(
         x_stretched=stretched,
@@ -390,3 +461,21 @@ def test_selection_interp_validation(geometry, stretched, interp_required):
     interp_reqd_actual, shp, bbox = sel_info.interp_validation(geometry)
 
     assert interp_reqd_actual == interp_required
+
+
+@pytest.mark.parametrize(
+    "yt_geom", ("cartesian", "spherical", "geographic", "internal_geographic")
+)
+def test_add_3rd_axis_name(yt_geom):
+
+    # get full list, remove on and make sure we get it back
+    expected = list(xr2yt._expected_yt_axes[yt_geom])
+    actual = xr2yt._add_3rd_axis_name(yt_geom, expected[:-1])
+    for dim in expected:
+        assert dim in actual
+
+    with pytest.raises(RuntimeError, match="This function should only"):
+        _ = xr2yt._add_3rd_axis_name(yt_geom, expected)
+
+    with pytest.raises(ValueError, match="Unsupported geometry type"):
+        _ = xr2yt._add_3rd_axis_name("bad_geometry", expected[:-1])
