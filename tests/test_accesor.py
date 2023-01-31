@@ -3,7 +3,7 @@ import pytest
 import xarray as xr
 
 import yt_xarray  # noqa: F401
-from yt_xarray._utilities import (
+from yt_xarray.utilities._utilities import (
     _get_test_coord,
     construct_ds_with_extra_dim,
     construct_minimal_ds,
@@ -129,7 +129,8 @@ def test_load_grid(ds_xr, use_callable):
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
     f = ds_yt.all_data()[("stream", flds[0])]
-    assert len(f) == ds.data_vars[flds[0]].size
+    expected = np.prod([n - 1 for n in ds.data_vars[flds[0]].shape])
+    assert len(f) == expected
 
 
 @pytest.mark.parametrize("use_callable", (True, False))
@@ -148,7 +149,9 @@ def test_time_reduction(coord_set, use_callable):
         flds, length_unit="km", use_callable=use_callable, sel_dict={"time": 0}
     )
     f = ds_yt.all_data()[("stream", flds[0])]
-    assert len(f) == ds.data_vars[flds[0]].isel({"time": 0}).size
+
+    expected = np.prod([n - 1 for n in ds.data_vars[flds[0]].isel({"time": 0}).shape])
+    assert len(f) == expected
     assert ds_yt.current_time == float(ds.time[0].values)
 
 
@@ -166,7 +169,8 @@ def test_coord_aliasing():
     yt_xarray.known_coord_aliases["b3"] = "x"
     ds_yt = ds.yt.load_grid([fld], length_unit="km")
     f = ds_yt.all_data()[("stream", fld)]
-    assert len(f) == ds.data_vars[fld].size
+    expected_shape = np.prod([n - 1 for n in ds.data_vars[fld].shape])
+    assert len(f) == expected_shape
 
 
 def test_geom_kwarg(ds_xr):
@@ -191,3 +195,10 @@ def test_stretched_grid():
                 "test_field",
             ]
         )
+
+    _ = ds.yt.load_grid(
+        fields=[
+            "test_field",
+        ],
+        use_callable=False,
+    )

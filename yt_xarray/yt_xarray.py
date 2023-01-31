@@ -2,7 +2,7 @@ from functools import wraps
 
 import xarray as xr
 
-from yt_xarray._utilities import _validate_file
+from yt_xarray.utilities._utilities import _validate_file
 
 
 @wraps(xr.open_dataset)

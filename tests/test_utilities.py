@@ -2,8 +2,8 @@ import xarray as xr
 import yt
 
 import yt_xarray
-from yt_xarray._utilities import _find_file, construct_minimal_ds
 from yt_xarray.accessor import _xr_to_yt as xr2yt
+from yt_xarray.utilities._utilities import _find_file, construct_minimal_ds
 
 
 def test_construct_minimal_ds():

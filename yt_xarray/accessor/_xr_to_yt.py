@@ -51,6 +51,7 @@ class Selection:
         self.selected_time = None
         self.ndims: int = None
         self.grid_type = None  # one of _GridType members
+        self.cell_widths: list = None
         self._process_selection(xr_ds)
 
         self.yt_coord_names = _convert_to_yt_internal_coords(self.selected_coords)
@@ -119,11 +120,13 @@ class Selection:
         # for each coordinate, apply any selector and then store min/max of the
         # coordinate. If the selector results in <= 1 in one of the dimensions,
         # that dimensions is dropped from the selection
-        shape = []  # the shape after selections
+        n_edges = []  # number of edges after selection
+        n_cells = []  # number of cells after selection
         dimranges = []  # the min, max after selections
         full_dimranges = []  # the global min, max
         coord_list = []  # the coord list after selection
         starting_indices = []  # global starting index
+        cell_widths = []  # cell widths after selection
 
         grid_type = _GridType.UNIFORM  # start with uniform assumption
         for c in full_coords:
@@ -145,8 +148,10 @@ class Selection:
             is_time_dim = _check_for_time(c, coord_vals)
 
             if coord_vals.size > 1:
+                cell_widths.append(coord_vals[1:] - coord_vals[:-1])
                 dimranges.append([coord_vals.min(), coord_vals.max()])
-                shape.append(coord_vals.size)
+                n_edges.append(coord_vals.size)
+                n_cells.append(coord_vals.size - 1)
                 coord_list.append(c)
                 starting_indices.append(si)
 
@@ -165,13 +170,14 @@ class Selection:
             elif coord_vals.size == 1 and is_time_dim:
                 time = coord_vals
 
-        if len(shape) > 3:
+        if len(n_edges) > 3:
             raise ValueError(
-                f"ndim is {len(shape)}, please provide a sel_dict to"
+                f"ndim is {len(n_edges)}, please provide a sel_dict to"
                 f" reduce dimensionality to 3."
             )
-        self.ndims = len(shape)
-        self.selected_shape = tuple(shape)
+        self.ndims = len(n_edges)
+        self.selected_shape = tuple(n_edges)
+        self.select_shape_cells = tuple(n_cells)
         self.full_bbox = np.array(full_dimranges)
         self.selected_bbox = np.array(dimranges)
         self.full_coords = tuple(full_coords)
@@ -179,11 +185,13 @@ class Selection:
         self.starting_indices = np.array(starting_indices)
         self.selected_time = time
         self.grid_type = grid_type
+        self.cell_widths = cell_widths
 
+        # set the yt grid dictionary
         self.grid_dict = {
             "left_edge": self.selected_bbox[:, 0],
             "right_edge": self.selected_bbox[:, 1],
-            "dimensions": self.selected_shape,
+            "dimensions": self.select_shape_cells,
             "level": 0,
         }
 
@@ -209,6 +217,15 @@ class Selection:
                     rmsg = msg + f"coordinates : {f} does not match {fields[0]}"
                     raise RuntimeError(rmsg)
 
+        # check that we have vertex-centered data (coordinate dimensions should
+        # match the field dimensions)
+        dim_list = list(xr_ds.data_vars[fields[0]].dims)
+        coord_shape = np.array([getattr(xr_ds, dim).size for dim in dim_list])
+        field_shape = np.array(shape)
+        if np.all(coord_shape == field_shape) is False:
+            raise RuntimeError(
+                "coordinate dimensions do not match field " "dimensions."
+            )
         return fields
 
     def select_from_xr(self, xr_ds, field):
@@ -328,3 +345,13 @@ def _check_grid_stretchiness(x):
 
 def _check_for_time(dim_name, dim_vals: np.ndarray):
     return "time" in dim_name.lower() or type(dim_vals) is np.datetime64
+
+
+def _interpolate_to_cell_centers(data: xr.DataArray):
+    # linear interpolation from nodes to cell centers across all dimensions of
+    # a DataArray
+    interp_dict = {}
+    for dim in data.dims:
+        dimvals = data.coords[dim].values
+        interp_dict[dim] = (dimvals[1:] + dimvals[:-1]) / 2.0
+    return data.interp(interp_dict)

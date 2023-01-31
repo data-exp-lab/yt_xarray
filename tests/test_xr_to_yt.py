@@ -4,7 +4,7 @@ import xarray as xr
 import yt
 
 import yt_xarray.accessor._xr_to_yt as xr2yt
-from yt_xarray._utilities import (
+from yt_xarray.utilities._utilities import (
     _get_test_coord,
     construct_ds_with_extra_dim,
     construct_minimal_ds,
@@ -43,7 +43,10 @@ def test_selection_aliases(coord):
         fields = list(ds.data_vars)
         sel = xr2yt.Selection(ds, fields)
         assert np.all(sel.starting_indices == np.array((0, 0, 0)))
-        assert sel.selected_shape == ds.data_vars[fields[0]].shape
+
+        n_edges = ds.data_vars[fields[0]].shape
+
+        assert np.all(sel.selected_shape == n_edges)
 
         if othername not in ("latitude", "longitude", "altitude"):
             # only check the non-yt names
@@ -199,6 +202,7 @@ def test_two_dimensional(use_callable):
     time = np.linspace(0, 1, 5)
 
     shp = (x.size, y.size, z.size)
+    n_cells_xy = (shp[0] - 1) * (shp[1] - 1)
 
     data = {
         "temp": xr.DataArray(
@@ -225,7 +229,7 @@ def test_two_dimensional(use_callable):
     )
 
     ad = yt_2d.all_data()
-    assert ad[("stream", "precip")].min() == data["precip"].min()
+    assert ad[("stream", "precip")].size == n_cells_xy
 
     slc = yt.SlicePlot(yt_2d, "z", ("stream", "precip"))
     slc.render()
@@ -253,7 +257,7 @@ def test_two_dimensional(use_callable):
         use_callable=use_callable,
     )
     ad = yt_2d.all_data()
-    assert ad[("stream", "precip_t")].min() == data["precip_t"][0, :].min()
+    assert ad[("stream", "precip_t")].size == n_cells_xy
 
     yt_2d = ds.yt.load_grid(
         fields=[
@@ -266,7 +270,7 @@ def test_two_dimensional(use_callable):
         use_callable=use_callable,
     )
     ad = yt_2d.all_data()
-    assert ad[("stream", "precip_t")].min() == data["precip_t"][1, :].min()
+    assert ad[("stream", "precip_t")].size == n_cells_xy
 
 
 _expected_geoms = {
