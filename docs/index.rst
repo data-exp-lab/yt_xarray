@@ -6,6 +6,7 @@ Welcome to yt_xarray's documentation!
    :caption: Contents:
 
    installation
+   supported_grids
    examples
    faq
    modules

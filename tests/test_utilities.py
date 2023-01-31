@@ -2,7 +2,8 @@ import xarray as xr
 import yt
 
 import yt_xarray
-from yt_xarray._utilities import _find_file, construct_minimal_ds
+from yt_xarray.accessor import _xr_to_yt as xr2yt
+from yt_xarray.utilities._utilities import _find_file, construct_minimal_ds
 
 
 def test_construct_minimal_ds():
@@ -11,6 +12,23 @@ def test_construct_minimal_ds():
 
     ds = construct_minimal_ds(n_fields=2)
     assert len(ds.variables) - len(ds.coords) == 2
+
+    ds = construct_minimal_ds(x_stretched=True, x_name="x")
+
+    assert xr2yt._check_grid_stretchiness(ds.x.values) == xr2yt._GridType.STRETCHED
+
+    ds = construct_minimal_ds(
+        x_stretched=False,
+        x_name="x",
+        y_stretched=True,
+        y_name="y",
+        z_stretched=True,
+        z_name="z",
+    )
+
+    assert xr2yt._check_grid_stretchiness(ds.x.values) == xr2yt._GridType.UNIFORM
+    assert xr2yt._check_grid_stretchiness(ds.y.values) == xr2yt._GridType.STRETCHED
+    assert xr2yt._check_grid_stretchiness(ds.z.values) == xr2yt._GridType.STRETCHED
 
 
 def test_file_validation(tmp_path):

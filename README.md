@@ -44,9 +44,9 @@ import xarray as xr
 import yt_xarray
 
 ds = xr.open_dataset(...)
-yt_ds = ds.yt.ds()
+yt_ds = ds.yt.load_grid()
 ```
-In this example, `ds.yt.ds()` returns a yt dataset using all of the fields in
+In this example, `ds.yt.grid()` returns a yt dataset using all of the fields in
 the xarray dataset, ready to use with any yt command. This will, however, only
 work if all of your data is defined on the same grid using coordinate names that
 yt understands. So for more complex cases, see the [example notebooks](https://yt-xarray.readthedocs.io/en/latest/examples.html)

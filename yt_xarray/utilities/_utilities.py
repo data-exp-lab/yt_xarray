@@ -13,15 +13,18 @@ def construct_minimal_ds(
     max_x: float = 360.0,
     n_x: int = 4,
     x_name: str = "longitude",
+    x_stretched: bool = False,
     min_y: float = -90.0,
     max_y: float = 90.0,
     n_y: int = 5,
     y_name: str = "latitude",
+    y_stretched: bool = False,
     min_z: float = 0.0,
     max_z: float = 500.0,
     n_z: int = 6,
     z_name: str = "depth",
     z_units: str = "km",
+    z_stretched: bool = False,
     field_name: str = "test_field",
     n_fields: int = 1,
     coord_order: Optional[Tuple[str, str, str]] = None,
@@ -52,6 +55,8 @@ def construct_minimal_ds(
         coord_order=coord_order,
     )
 
+    is_stretched = {x_name: x_stretched, y_name: y_stretched, z_name: z_stretched}
+
     coords = {}
     var_shape = ()
     coord_order_rn = ()
@@ -61,7 +66,11 @@ def construct_minimal_ds(
         mx = cdict["max_" + c]
         n = cdict["n_" + c]
         cname = c + "_name"
-        coords[cdict[cname]] = np.linspace(mn, mx, n)
+        cvals = np.linspace(mn, mx, n)
+        if is_stretched[cdict[cname]]:
+            dx = cvals[1:] - cvals[:-1]
+            cvals[int(n / 2) :] = cvals[int(n / 2) :] + dx[0] * 2.0
+        coords[cdict[cname]] = cvals
         coord_arrays.append(coords[cdict[cname]])
         coord_order_rn += (cdict[cname],)
         var_shape += (n,)
@@ -126,14 +135,14 @@ def _get_test_coord(
     return np.linspace(minv, maxv, n)
 
 
-def construct_ds_with_time(icoord):
+def construct_ds_with_extra_dim(icoord: int, dim_name: str = "time"):
 
     coord_configs = {
-        0: ("time", "x", "y", "z"),
-        1: ("time", "z", "y", "x"),
-        2: ("time", "lon", "lat", "lev"),
-        3: ("time", "longitude", "latitude", "altitude"),
-        4: ("time", "depth", "longitude", "lat"),
+        0: (dim_name, "x", "y", "z"),
+        1: (dim_name, "z", "y", "x"),
+        2: (dim_name, "lon", "lat", "lev"),
+        3: (dim_name, "longitude", "latitude", "altitude"),
+        4: (dim_name, "depth", "longitude", "lat"),
     }
 
     data_vars = {}

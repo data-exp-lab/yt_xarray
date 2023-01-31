@@ -4,9 +4,9 @@ import xarray as xr
 import yt
 
 import yt_xarray.accessor._xr_to_yt as xr2yt
-from yt_xarray._utilities import (
+from yt_xarray.utilities._utilities import (
     _get_test_coord,
-    construct_ds_with_time,
+    construct_ds_with_extra_dim,
     construct_minimal_ds,
 )
 
@@ -43,7 +43,10 @@ def test_selection_aliases(coord):
         fields = list(ds.data_vars)
         sel = xr2yt.Selection(ds, fields)
         assert np.all(sel.starting_indices == np.array((0, 0, 0)))
-        assert sel.selected_shape == ds.data_vars[fields[0]].shape
+
+        n_edges = ds.data_vars[fields[0]].shape
+
+        assert np.all(sel.selected_shape == n_edges)
 
         if othername not in ("latitude", "longitude", "altitude"):
             # only check the non-yt names
@@ -96,6 +99,73 @@ def test_selection_isel(ds_xr, coord):
     assert len(sel.selected_shape) == 2
     assert coord not in sel.selected_coords
 
+    with pytest.raises(RuntimeError, match="sel_dict_type must be"):
+        _ = xr2yt.Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type="bad")
+
+
+def test_selection_units():
+    x = np.linspace(0, 1, 5)
+    y = np.linspace(0, 1, 5)
+    z = np.linspace(0, 1, 5)
+
+    shp = (x.size, y.size, z.size)
+    dvals = np.random.rand(*shp)
+    cdict = {"x": x, "y": y, "z": z}
+    dim = ("x", "y", "z")
+    data = {
+        "temp": xr.DataArray(dvals, coords=cdict, dims=dim, attrs={"units": "K"}),
+        "flips": xr.DataArray(dvals, coords=cdict, dims=dim, attrs={"units": "smoots"}),
+        "P": xr.DataArray(dvals, coords=cdict, dims=dim, attrs={"units": "MPa"}),
+    }
+
+    ds = xr.Dataset(data)
+    ds_yt = ds.yt.load_grid(geometry="cartesian", length_unit="m")
+    _ = ds_yt.field_list
+    for fld in ("temp", "P"):
+        finfo = ds_yt.field_info[("stream", fld)]
+        assert finfo.units == ds.data_vars[fld].units
+
+    assert ds_yt.field_info[("stream", "flips")].units == ""
+
+
+def test_selection_errors(ds_xr):
+
+    coord = "latitude"
+    sel_dict = {coord: slice(1, len(ds_xr.coords[coord]))}
+    sel_dict_type = "isel"
+    with pytest.raises(ValueError, match="Please provide a list of fields"):
+        _ = xr2yt.Selection(ds_xr, None, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
+
+    x = np.linspace(0, 1, 5)
+    y = np.linspace(0, 1, 6)
+    yy = np.linspace(0, 1, 6)
+    z = np.linspace(0, 1, 4)
+
+    shp = (x.size, y.size, z.size)
+
+    T1 = xr.DataArray(
+        np.random.rand(*shp), coords={"x": x, "y": y, "z": z}, dims=("x", "y", "z")
+    )
+    T2 = xr.DataArray(
+        np.random.rand(*shp[:-1]), coords={"x": x, "y": y}, dims=("x", "y")
+    )
+    T3 = xr.DataArray(
+        np.random.rand(*shp[:-1]), coords={"x": x, "yy": yy}, dims=("x", "yy")
+    )
+    data = {
+        "T1": T1,
+        "T2": T2,
+        "T3": T3,
+    }
+    ds = xr.Dataset(data)
+    flds = ["T1", "T2"]
+    with pytest.raises(RuntimeError, match="does not match"):
+        _ = xr2yt.Selection(ds, flds)
+
+    flds = ["T2", "T3"]
+    with pytest.raises(RuntimeError, match="coordinates : "):
+        _ = xr2yt.Selection(ds, flds)
+
 
 @pytest.mark.parametrize("coord", ("latitude", "longitude", "depth"))
 def test_selection_sel(ds_xr, coord):
@@ -130,9 +200,12 @@ def test_selection_sel(ds_xr, coord):
 
 @pytest.mark.parametrize("coord_set", range(5))
 def test_time_reduction(coord_set):
-    ds = construct_ds_with_time(coord_set)
+    ds = construct_ds_with_extra_dim(coord_set)
 
-    with pytest.raises(ValueError, match=r".* reduce dimensionality .*"):
+    with pytest.raises(
+        NotImplementedError,
+        match="Loading data with time as a dimension is not currently",
+    ):
         _ = xr2yt.Selection(ds, list(ds.data_vars))
 
     sel = xr2yt.Selection(ds, list(ds.data_vars), sel_dict={"time": 0})
@@ -142,6 +215,15 @@ def test_time_reduction(coord_set):
     sel = xr2yt.Selection(
         ds, list(ds.data_vars), sel_dict={"time": timetoselect}, sel_dict_type="sel"
     )
+    assert len(sel.selected_shape) == 3
+
+
+def test_dimension_reduction():
+    ds = construct_ds_with_extra_dim(0, dim_name="eta")
+    with pytest.raises(ValueError, match="ndim is 4"):
+        _ = xr2yt.Selection(ds, list(ds.data_vars))
+
+    sel = xr2yt.Selection(ds, list(ds.data_vars), sel_dict={"eta": 0})
     assert len(sel.selected_shape) == 3
 
 
@@ -179,14 +261,15 @@ def test_coord_aliasing():
         assert c in sel.yt_coord_names
 
 
-@pytest.mark.parametrize("method", ["load_grid_from_callable", "load_uniform_grid"])
-def test_two_dimensional(method):
+@pytest.mark.parametrize("use_callable", [True, False])
+def test_two_dimensional(use_callable):
     x = np.linspace(0, 1, 16)
     y = np.linspace(0, 1, 16)
     z = np.linspace(0, 1, 16)
     time = np.linspace(0, 1, 5)
 
     shp = (x.size, y.size, z.size)
+    n_cells_xy = x.size * y.size
 
     data = {
         "temp": xr.DataArray(
@@ -203,44 +286,47 @@ def test_two_dimensional(method):
     }
 
     ds = xr.Dataset(data)
-    load_meth = getattr(ds.yt, method)
-    yt_2d = load_meth(
+    yt_2d = ds.yt.load_grid(
         fields=[
             "precip",
         ],
         length_unit=1,
         geometry="cartesian",
+        use_callable=use_callable,
     )
 
     ad = yt_2d.all_data()
-    assert ad[("stream", "precip")].min() == data["precip"].min()
+    assert ad[("stream", "precip")].size == n_cells_xy
 
     slc = yt.SlicePlot(yt_2d, "z", ("stream", "precip"))
     slc.render()
 
     with pytest.raises(
-        RuntimeError, match="Trying to load a field with time as a dimension."
+        NotImplementedError,
+        match="Loading data with time as a dimension is not currently",
     ):
-        _ = load_meth(
+        _ = ds.yt.load_grid(
             fields=[
                 "precip_t",
             ],
             length_unit=1,
             geometry="cartesian",
+            use_callable=use_callable,
         )
 
-    yt_2d = load_meth(
+    yt_2d = ds.yt.load_grid(
         fields=[
             "precip_t",
         ],
         length_unit=1,
         geometry="cartesian",
         sel_dict={"time": 0},
+        use_callable=use_callable,
     )
     ad = yt_2d.all_data()
-    assert ad[("stream", "precip_t")].min() == data["precip_t"][0, :].min()
+    assert ad[("stream", "precip_t")].size == n_cells_xy
 
-    yt_2d = load_meth(
+    yt_2d = ds.yt.load_grid(
         fields=[
             "precip_t",
         ],
@@ -248,9 +334,10 @@ def test_two_dimensional(method):
         geometry="cartesian",
         sel_dict={"time": time[1]},
         sel_dict_type="sel",
+        use_callable=use_callable,
     )
     ad = yt_2d.all_data()
-    assert ad[("stream", "precip_t")].min() == data["precip_t"][1, :].min()
+    assert ad[("stream", "precip_t")].size == n_cells_xy
 
 
 _expected_geoms = {
@@ -306,3 +393,89 @@ def test_determine_yt_geomtype(geometry, coord_list, expected):
             _ = xr2yt._determine_yt_geomtype(geometry, coord_list)
     else:
         assert xr2yt._determine_yt_geomtype(geometry, coord_list) == expected
+
+
+@pytest.mark.parametrize(
+    "input_dim, expected_type",
+    (
+        (np.arange(0, 10), xr2yt._GridType.UNIFORM),
+        (np.linspace(0, 10, 9), xr2yt._GridType.UNIFORM),
+        (np.array([1.0, 2.0, 2.3, 3.5]), xr2yt._GridType.STRETCHED),
+        (np.linspace(0, 10, 3) + np.array([0.0, 0.0, 1e-15]), xr2yt._GridType.UNIFORM),
+        (np.linspace(0, 10, 3) + np.array([0.0, 0.0, 1e-7]), xr2yt._GridType.STRETCHED),
+    ),
+)
+def test_grid_type(input_dim, expected_type):
+    assert xr2yt._check_grid_stretchiness(input_dim) == expected_type
+
+
+@pytest.mark.parametrize(
+    "dim_name, dim_vals, expected",
+    (
+        ("x", np.array([1]), False),
+        ("x", np.datetime64("2001-01-02").astype("datetime64[ns]"), True),
+        ("TiMe", np.array([1]), True),
+    ),
+)
+def test_time_check(dim_name, dim_vals, expected):
+    assert xr2yt._check_for_time(dim_name, dim_vals) is expected
+
+
+@pytest.mark.parametrize(
+    "geometry, stretched, interp_required",
+    [
+        ("cartesian", False, False),
+        ("cartesian", True, True),
+        ("geographic", False, True),
+        ("internal_geographic", False, True),
+        ("not_a_geometry", False, True),
+    ],
+)
+def test_selection_interp_validation(geometry, stretched, interp_required):
+
+    if geometry == "cartesian":
+        dim_names = ("x", "y", "z")
+    elif geometry == "geographic":
+        dim_names = ("longitude", "latitude", "altitude")
+    elif geometry == "internal_geographic":
+        dim_names = ("longitude", "latitude", "depth")
+    else:
+        dim_names = ("x", "y", "z")
+
+    ds = construct_minimal_ds(
+        x_stretched=stretched,
+        x_name=dim_names[0],
+        y_stretched=False,
+        y_name=dim_names[1],
+        z_stretched=False,
+        z_name=dim_names[2],
+    )
+
+    fields = list(ds.data_vars)
+
+    sel_info = xr2yt.Selection(
+        ds,
+        fields=fields,
+    )
+
+    interp_reqd_actual, shp, bbox = sel_info.interp_validation(geometry)
+
+    assert interp_reqd_actual == interp_required
+
+
+@pytest.mark.parametrize(
+    "yt_geom", ("cartesian", "spherical", "geographic", "internal_geographic")
+)
+def test_add_3rd_axis_name(yt_geom):
+
+    # get full list, remove on and make sure we get it back
+    expected = list(xr2yt._expected_yt_axes[yt_geom])
+    actual = xr2yt._add_3rd_axis_name(yt_geom, expected[:-1])
+    for dim in expected:
+        assert dim in actual
+
+    with pytest.raises(RuntimeError, match="This function should only"):
+        _ = xr2yt._add_3rd_axis_name(yt_geom, expected)
+
+    with pytest.raises(ValueError, match="Unsupported geometry type"):
+        _ = xr2yt._add_3rd_axis_name("bad_geometry", expected[:-1])

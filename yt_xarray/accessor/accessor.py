@@ -7,6 +7,8 @@ import yt
 from unyt import unyt_quantity
 
 from yt_xarray.accessor import _xr_to_yt
+from yt_xarray.accessor._readers import _get_xarray_reader
+from yt_xarray.utilities.logging import ytxr_log
 
 
 @xr.register_dataset_accessor("yt")
@@ -17,17 +19,47 @@ class YtAccessor:
         self._bbox = {}
         self._field_grids = defaultdict(lambda: None)
 
-    def _load_uniform_grid(
+    def load_grid(
         self,
         fields: Optional[List[str]] = None,
-        geometry=None,
-        use_callable=True,
+        geometry: str = None,
+        use_callable: bool = True,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
-        allow_time_as_dim: Optional[bool] = False,
         **kwargs,
     ):
+        """
+        Initializes a yt gridded dataset for the supplied fields.
 
+        Parameters
+        ----------
+        fields : list[str]
+            list of fields to include. If None, will try to use all fields
+
+        geometry : str
+            the geometry to pass to yt.load_uniform grid. If not provided,
+            will attempt to infer.
+
+        use_callable : bool
+            if True (default), then the yt dataset will utilize links to the open
+            xarray Dataset handle to avoid copying memory.
+
+        sel_dict: dict
+            an optional selection dictionary to apply to the fields before yt dataset
+            initialization
+
+        sel_dict_type: str
+            either "isel" (default) or "sel" to indicate index or value selection for
+            sel_dict.
+
+        kwargs :
+            any additional keyword arguments to pass to yt.load_uniform_grid
+
+        Returns
+        -------
+        yt StreamDataset
+
+        """
         if fields is None:
             # might as well try!
             fields = list(self._obj.data_vars)
@@ -37,8 +69,11 @@ class YtAccessor:
             fields=fields,
             sel_dict=sel_dict,
             sel_dict_type=sel_dict_type,
-            allow_time_as_dim=allow_time_as_dim,
         )
+        if sel_info.grid_type == _xr_to_yt._GridType.STRETCHED and use_callable:
+            raise NotImplementedError(
+                "Detected a stretched grid, which is not yet supported for callables."
+            )
 
         if geometry is None:
             geometry = self.geometry
@@ -49,9 +84,6 @@ class YtAccessor:
                 "geometry = 'geographic', 'internal_geopgraphic' or 'cartesian'"
             )
 
-        # need to possibly account for stretched grid here... or at
-        # least check for it and raise an error...
-
         if "length_unit" in kwargs:
             length_unit = kwargs.pop("length_unit")
         else:
@@ -59,7 +91,7 @@ class YtAccessor:
             if length_unit is None:
                 raise ValueError(
                     "cannot determine length_unit, please provide as"
-                    "a keyword argument."
+                    " a keyword argument."
                 )
 
         axis_order = sel_info.yt_coord_names
@@ -75,99 +107,58 @@ class YtAccessor:
             simtime = unyt_quantity(int(simtime), "ns")
         kwargs.update({"sim_time": simtime})
 
-        data_shp = sel_info.selected_shape
-        bbox = sel_info.selected_bbox
+        interp_required, data_shp, bbox = sel_info.interp_validation(geometry)
+        g_dict = sel_info.grid_dict.copy()
+        g_dict["dimensions"] = data_shp
+        g_dict["left_edge"] = bbox[:, 0]
+        g_dict["right_edge"] = bbox[:, 1]
+
         if sel_info.ndims == 2:
             axis_order = geom[1]
             axis_order = _xr_to_yt._add_3rd_axis_name(geom[0], axis_order)
             geom = (geom[0], axis_order)
             data_shp = data_shp + (1,)
-            bbox = np.vstack([bbox, [0, 1]])
+            bbox = np.vstack([bbox, [-0.5, 0.5]])
 
+        data = {}
         if use_callable:
+            reader = _get_xarray_reader(
+                self._obj, sel_info, interp_required=interp_required
+            )
 
-            def _read_data(handle, sel_info):
-                def _reader(grid, field_name):
-                    ftype, fname = field_name
-
-                    gsi = (
-                        sel_info.starting_indices
-                    )  # should just set it for the grid....
-                    if sel_info.ndims == 2:
-                        gsi = np.concatenate(
-                            [
-                                gsi,
-                                [
-                                    0,
-                                ],
-                            ]
-                        )
-                    si = grid.get_global_startindex() + gsi
-                    ei = si + grid.ActiveDimensions
-
-                    # build the index-selector for our grid
-                    c_list = sel_info.selected_coords  # the xarray coord names
-                    i_select_dict = {}
-                    for idim in range(sel_info.ndims):  # 2d/3d issue here
-                        i_select_dict[c_list[idim]] = slice(si[idim], ei[idim])
-
-                    # apply any initial selections, only along dimensions
-                    # not covered in the grid here, accounting for sel vs isel.
-                    # these selections **should** reduce the dimensionality
-                    # of the array.
-                    first_selection = {}
-                    for ky, val in sel_info.sel_dict.items():
-                        if ky not in i_select_dict:
-                            if sel_info.sel_dict_type == "sel":
-                                first_selection[ky] = val
-                            else:
-                                # just add it to the i_select_dict
-                                i_select_dict[ky] = val
-
-                    var = getattr(handle, fname)
-                    if first_selection:
-                        data = var.sel(first_selection).isel(i_select_dict)
-                    else:
-                        data = var.isel(i_select_dict)
-                    vals = data.values
-                    if sel_info.ndims == 2:
-                        vals = np.expand_dims(vals, axis=-1)
-                    return vals
-
-                return _reader
-
-            reader = _read_data(self._obj, sel_info)
-
-            data = {}
-            for field in fields:
-                units = sel_info.units[field]
+        for field in fields:
+            units = sel_info.units[field]
+            if use_callable:
                 data[field] = (reader, units)
+            else:
+                vals = sel_info.select_from_xr(self._obj, field).load()
+                if interp_required:
+                    vals = _xr_to_yt._interpolate_to_cell_centers(vals)
+                vals = vals.values
+                if sel_info.ndims == 2:
+                    vals = np.expand_dims(vals, axis=-1)
+                data[field] = (vals, units)
 
-            g_dict = sel_info.grid_dict.copy()
-            if sel_info.ndims == 2:
-                g_dict["left_edge"] = np.concatenate(
-                    [
-                        g_dict["left_edge"],
-                        [
-                            -0.5,
-                        ],
-                    ]
-                )
-                g_dict["right_edge"] = np.concatenate(
-                    [
-                        g_dict["right_edge"],
-                        [
-                            0.5,
-                        ],
-                    ]
-                )
-                g_dict["dimensions"] += (1,)
+        if sel_info.ndims == 2:
+            g_dict["left_edge"] = np.append(g_dict["left_edge"], -0.5)
+            g_dict["right_edge"] = np.append(g_dict["right_edge"], 0.5)
+            g_dict["dimensions"] += (1,)
 
+        if sel_info.grid_type == _xr_to_yt._GridType.STRETCHED:
+            return yt.load_uniform_grid(
+                data,
+                data_shp,
+                geometry=geom,
+                bbox=bbox,
+                length_unit=length_unit,
+                cell_widths=sel_info.cell_widths,
+                **kwargs,
+            )
+        else:
             data.update(g_dict)
             grid_data = [
                 data,
             ]
-
             return yt.load_amr_grids(
                 grid_data,
                 data_shp,
@@ -176,99 +167,6 @@ class YtAccessor:
                 length_unit=length_unit,
                 **kwargs,
             )
-
-        else:
-            # should account for stretched grid here?
-            data = {}
-
-            for field in fields:
-                vals = sel_info.select_from_xr(self._obj, field).values
-                if sel_info.ndims == 2:
-                    vals = np.expand_dims(vals, axis=-1)
-                units = sel_info.units[field]
-                data[field] = (vals, units)
-
-            return yt.load_uniform_grid(
-                data,
-                data_shp,
-                length_unit=length_unit,
-                bbox=bbox,
-                geometry=geom,
-                **kwargs,
-            )
-
-    def load_grid_from_callable(
-        self,
-        fields: Optional[List[str]] = None,
-        geometry=None,
-        sel_dict: Optional[dict] = None,
-        sel_dict_type: Optional[str] = "isel",
-        allow_time_as_dim: Optional[bool] = False,
-        **kwargs,
-    ):
-        """
-        returns a uniform grid yt dataset linked to the open xarray handle.
-
-        Parameters
-        ----------
-        fields : list of fields to include. If None, will try to use all fields
-        geometry : the geometry to pass to yt.load_uniform grid. If not provided,
-        will attempt to infer.
-        kwargs : any additional keyword arguments to pass to yt.load_uniform_grid
-
-        Returns
-        -------
-        yt StreamDataset
-
-        Notes
-        -----
-
-        This function relies on the stream callable functionality in yt>=4.1.0
-        in order to read directly from an open xarray handle without creating
-        additional in-memory copies of the data.
-        """
-
-        return self._load_uniform_grid(
-            fields=fields,
-            geometry=geometry,
-            sel_dict=sel_dict,
-            sel_dict_type=sel_dict_type,
-            allow_time_as_dim=allow_time_as_dim,
-            **kwargs,
-        )
-
-    def load_uniform_grid(
-        self,
-        fields: Optional[List[str]] = None,
-        geometry: Optional[str] = None,
-        sel_dict: Optional[dict] = None,
-        sel_dict_type: Optional[str] = "isel",
-        allow_time_as_dim: Optional[bool] = False,
-        **kwargs,
-    ):
-        """
-        return an in-memory uniform grid yt dataset
-
-        Parameters
-        ----------
-        fields : list of fields to include. If None, will try to use all fields
-        geometry : the geometry to pass to yt.load_uniform grid. If not provided,
-        will attempt to infer.
-        kwargs : any additional keyword arguments to pass to yt.load_uniform_grid
-
-        Returns
-        -------
-        yt StreamDataset
-        """
-        return self._load_uniform_grid(
-            fields=fields,
-            geometry=geometry,
-            use_callable=False,
-            sel_dict=sel_dict,
-            sel_dict_type=sel_dict_type,
-            allow_time_as_dim=allow_time_as_dim,
-            **kwargs,
-        )
 
     def _infer_length_unit(self):
         if self.geometry == "geodetic":
@@ -315,15 +213,10 @@ class YtAccessor:
             if coord.lower() in geodetic_names:
                 ctype = "geodetic"
 
-        # TODO: logging here.
-        print(
-            f"Inferred geometry type is {ctype} -- to override, use ds.yt.set_geometry"
+        ytxr_log.info(
+            f"Inferred geometry type is {ctype}. To override, use ds.yt.set_geometry"
         )
         return ctype
-
-    def ds(self):
-        """return a yt dataset with all data fields"""
-        return self.load_grid_from_callable()
 
     @property
     def _coord_list(self):
