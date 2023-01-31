@@ -6,7 +6,7 @@ from yt_xarray.accessor import _xr_to_yt
 
 
 def _get_xarray_reader(
-    handle, sel_info: _xr_to_yt.Selection, reader_type: Optional[str] = "node_to_cell"
+    handle, sel_info: _xr_to_yt.Selection, interp_required: Optional[bool] = True
 ):
 
     # the callable generator for an open xarray handle.
@@ -25,19 +25,13 @@ def _get_xarray_reader(
         if sel_info.ndims == 2:
             gsi = np.append(gsi, 0)
 
-        # si and ei below are node indices now.
         si = grid.get_global_startindex() + gsi
-        ei = (
-            si
-            + grid.ActiveDimensions
-            + np.array(
-                [
-                    1,
-                    1,
-                    1,
-                ]
-            )
-        )
+        ei = si + grid.ActiveDimensions
+        if interp_required:
+            # if interpolating, si and ei must be node indices so
+            # we offset by an additional element
+            cell_to_node_offset = np.ones((3,), dtype=int)
+            ei = ei + cell_to_node_offset
 
         # build the index-selector for our yt grid object
         c_list = sel_info.selected_coords  # the xarray coord names
@@ -65,16 +59,14 @@ def _get_xarray_reader(
         # load into memory (if its not) as xr DataArray
         datavals = datavals.load()
 
-        # interpolate from nodes to cell centers across all remaining dims
-        datavals = _xr_to_yt._interpolate_to_cell_centers(datavals)
+        if interp_required:
+            # interpolate from nodes to cell centers across all remaining dims
+            datavals = _xr_to_yt._interpolate_to_cell_centers(datavals)
 
-        # return the cell centered values
+        # return the plain values
         vals = datavals.values
         if sel_info.ndims == 2:
             vals = np.expand_dims(vals, axis=-1)
         return vals
 
-    if reader_type == "node_to_cell":
-        return _reader
-    else:
-        raise ValueError(f"Unexpected reader_type: {reader_type}")
+    return _reader

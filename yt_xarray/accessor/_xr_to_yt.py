@@ -6,6 +6,8 @@ import numpy as np
 import unyt
 import xarray as xr
 
+from yt_xarray.utilities.logging import ytxr_log
+
 # collection of helpful classes and functions that ease the communication between
 # xarray and yt datasets
 
@@ -233,6 +235,60 @@ class Selection:
             return xr_ds[field].isel(self.sel_dict)
         else:
             return xr_ds[field].sel(self.sel_dict)
+
+    def interp_validation(self, geometry):
+        # checks if yt will need to interpolate to cell center
+        # returns a tuple of (bool, shape, bbox). If the bool is True then
+        # interpolation is required.
+        ytxr_log.info(
+            "Attempting to detect if yt_xarray will require field interpolation:"
+        )
+
+        if self.grid_type == _GridType.STRETCHED:
+            ytxr_log.info("    stretched grid detected: yt_xarray will interpolate.")
+            return True, self.select_shape_cells, self.selected_bbox
+        elif self.grid_type == _GridType.UNIFORM:
+            dxyz = np.array([cell_wids[0] for cell_wids in self.cell_widths])
+            bbox = self.selected_bbox.copy()
+            bbox[:, 0] = bbox[:, 0] - dxyz / 2
+            bbox[:, 1] = bbox[:, 0] + dxyz / 2
+            if geometry == "cartesian":
+                # OK to wrap in a pseudo-grid, offset bounds by +/- 1/2 cell
+                # spacing, return number of nodes as the number of cells for
+                # the pseudo-grid and do not require interpolation.
+                ytxr_log.info(
+                    "    Cartesian geometry on uniform grid: yt_xarray will not interpolate."
+                )
+                return False, self.selected_shape, bbox
+
+            elif geometry in ("geographic", "internal_geographic"):
+                msg = (
+                    "    Geodetic geometry bounds exceeded: yt_xarray will interpolate"
+                )
+                # check if still within bounds, if not, require interpolation
+                for idim, dim in enumerate(self.selected_coords):
+                    if dim == "latitude":
+                        if bbox[idim, 1] > 90.0 or bbox[idim, 0] < -90.0:
+                            ytxr_log.info(msg)
+                            return True, self.select_shape_cells, self.selected_bbox
+                    elif dim == "longitude":
+                        if bbox[idim, 1] > 180.0 or bbox[idim, 0] < -180.0:
+                            ytxr_log.info(msg)
+                            return True, self.select_shape_cells, self.selected_bbox
+
+                # should be OK to pad cells
+                ytxr_log.info(
+                    "    Geodetic geometry on uniform grid within geodetic "
+                    "bounds: yt_xarray will interpolate"
+                )
+                return False, self.selected_shape, bbox
+
+            else:
+                # the others would require similar bounds checks, so just
+                # require interpolation for now at least.
+                return True, self.select_shape_cells, self.selected_bbox
+        else:
+            raise RuntimeError(f"Unexptected grid type: {self.grid_type}")
 
 
 _coord_aliases = {

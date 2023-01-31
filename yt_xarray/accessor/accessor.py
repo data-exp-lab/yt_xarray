@@ -107,8 +107,12 @@ class YtAccessor:
             simtime = unyt_quantity(int(simtime), "ns")
         kwargs.update({"sim_time": simtime})
 
-        data_shp = sel_info.select_shape_cells  # number of nodes
-        bbox = sel_info.selected_bbox
+        interp_required, data_shp, bbox = sel_info.interp_validation(geometry)
+        g_dict = sel_info.grid_dict.copy()
+        g_dict["dimensions"] = data_shp
+        g_dict["left_edge"] = bbox[:, 0]
+        g_dict["right_edge"] = bbox[:, 1]
+
         if sel_info.ndims == 2:
             axis_order = geom[1]
             axis_order = _xr_to_yt._add_3rd_axis_name(geom[0], axis_order)
@@ -118,7 +122,9 @@ class YtAccessor:
 
         data = {}
         if use_callable:
-            reader = _get_xarray_reader(self._obj, sel_info, reader_type="node_to_cell")
+            reader = _get_xarray_reader(
+                self._obj, sel_info, interp_required=interp_required
+            )
 
         for field in fields:
             units = sel_info.units[field]
@@ -126,12 +132,13 @@ class YtAccessor:
                 data[field] = (reader, units)
             else:
                 vals = sel_info.select_from_xr(self._obj, field).load()
-                vals_cc = _xr_to_yt._interpolate_to_cell_centers(vals).values
+                if interp_required:
+                    vals = _xr_to_yt._interpolate_to_cell_centers(vals)
+                vals = vals.values
                 if sel_info.ndims == 2:
-                    vals_cc = np.expand_dims(vals_cc, axis=-1)
-                data[field] = (vals_cc, units)
+                    vals = np.expand_dims(vals, axis=-1)
+                data[field] = (vals, units)
 
-        g_dict = sel_info.grid_dict.copy()
         if sel_info.ndims == 2:
             g_dict["left_edge"] = np.append(g_dict["left_edge"], -0.5)
             g_dict["right_edge"] = np.append(g_dict["right_edge"], 0.5)

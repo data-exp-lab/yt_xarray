@@ -3,6 +3,7 @@ import pytest
 import xarray as xr
 
 import yt_xarray  # noqa: F401
+from yt_xarray.accessor import _xr_to_yt
 from yt_xarray.utilities._utilities import (
     _get_test_coord,
     construct_ds_with_extra_dim,
@@ -129,8 +130,7 @@ def test_load_grid(ds_xr, use_callable):
     assert all([f in expected_field_list] for f in ds_yt.field_list)
 
     f = ds_yt.all_data()[("stream", flds[0])]
-    expected = np.prod([n - 1 for n in ds.data_vars[flds[0]].shape])
-    assert len(f) == expected
+    assert len(f) == ds.data_vars[flds[0]].size
 
 
 @pytest.mark.parametrize("use_callable", (True, False))
@@ -150,7 +150,20 @@ def test_time_reduction(coord_set, use_callable):
     )
     f = ds_yt.all_data()[("stream", flds[0])]
 
-    expected = np.prod([n - 1 for n in ds.data_vars[flds[0]].isel({"time": 0}).shape])
+    # figure out if this ds will be interpolated to cell centers or not so we
+    # know the expected size of the output arrays
+    sel = _xr_to_yt.Selection(
+        ds,
+        fields=flds,
+        sel_dict={"time": 0},
+        sel_dict_type="isel",
+    )
+    interpd, _, _ = sel.interp_validation(str(ds_yt.geometry))
+    f_ = ds.data_vars[flds[0]].isel({"time": 0})
+    if interpd:
+        expected = np.prod([n - 1 for n in f_.shape])
+    else:
+        expected = f_.size
     assert len(f) == expected
     assert ds_yt.current_time == float(ds.time[0].values)
 
@@ -169,8 +182,7 @@ def test_coord_aliasing():
     yt_xarray.known_coord_aliases["b3"] = "x"
     ds_yt = ds.yt.load_grid([fld], length_unit="km")
     f = ds_yt.all_data()[("stream", fld)]
-    expected_shape = np.prod([n - 1 for n in ds.data_vars[fld].shape])
-    assert len(f) == expected_shape
+    assert len(f) == ds.data_vars[fld].size
 
 
 def test_geom_kwarg(ds_xr):

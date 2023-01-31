@@ -202,7 +202,7 @@ def test_two_dimensional(use_callable):
     time = np.linspace(0, 1, 5)
 
     shp = (x.size, y.size, z.size)
-    n_cells_xy = (shp[0] - 1) * (shp[1] - 1)
+    n_cells_xy = x.size * y.size
 
     data = {
         "temp": xr.DataArray(
@@ -352,3 +352,41 @@ def test_grid_type(input_dim, expected_type):
 )
 def test_time_check(dim_name, dim_vals, expected):
     assert xr2yt._check_for_time(dim_name, dim_vals) is expected
+
+
+@pytest.mark.parametrize(
+    "geometry, stretched, interp_required",
+    [
+        ("cartesian", False, False),
+        ("cartesian", True, True),
+        ("geographic", False, True),
+    ],
+)
+def test_selection_interp_validation(geometry, stretched, interp_required):
+
+    if geometry == "cartesian":
+        dim_names = ("x", "y", "z")
+    elif geometry == "geographic":
+        dim_names = ("longitude", "latitude", "altitude")
+    elif geometry == "internal_geographic":
+        dim_names = ("longitude", "latitude", "depth")
+
+    ds = construct_minimal_ds(
+        x_stretched=stretched,
+        x_name=dim_names[0],
+        y_stretched=False,
+        y_name=dim_names[1],
+        z_stretched=False,
+        z_name=dim_names[2],
+    )
+
+    fields = list(ds.data_vars)
+
+    sel_info = xr2yt.Selection(
+        ds,
+        fields=fields,
+    )
+
+    interp_reqd_actual, shp, bbox = sel_info.interp_validation(geometry)
+
+    assert interp_reqd_actual == interp_required
