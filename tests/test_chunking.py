@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
+import xarray as xr
 import yt
+from dask import array as da
 
 import yt_xarray  # noqa: F401
 from yt_xarray import sample_data
@@ -72,11 +74,12 @@ def test_geographic_no_interp():
     ds_yt_nochunk = ds.yt.load_grid()
     ds_ch_no_call = ds.yt.load_grid(chunksizes=2, use_callable=False)
     ds_ch_call = ds.yt.load_grid(chunksizes=2)
+    ds_tuple = ds.yt.load_grid(chunksizes=(2, 2, 2))
 
     # number of cells == number of initial node points
     expected_size = ds.data_vars["test_field_0"].size
 
-    for dsyt in [ds_yt_nochunk, ds_ch_no_call, ds_ch_call]:
+    for dsyt in [ds_yt_nochunk, ds_ch_no_call, ds_ch_call, ds_tuple]:
         ad = dsyt.all_data()
         fld = ad[("stream", "test_field_0")]
         assert fld.size == expected_size
@@ -100,3 +103,51 @@ def test_chunks_stretched_not_implemented():
     ds = construct_minimal_ds(x_name="x", y_name="y", z_name="z", x_stretched=True)
     with pytest.raises(NotImplementedError, match="Stretched grids cannot set"):
         _ = ds.yt.load_grid(length_unit="km", chunksizes=10, use_callable=False)
+
+
+def test_dask_array():
+
+    # checks that we can handle a field that is a dask array
+    shp = (10, 12, 5)
+    f1 = da.random.random(shp, chunks=5)
+    coords = {
+        "x": np.linspace(0, 1, shp[0]),
+        "y": np.linspace(0, 1, shp[1]),
+        "z": np.linspace(0, 1, shp[2]),
+    }
+
+    data = {"test_field": xr.DataArray(f1, coords=coords, dims=("x", "y", "z"))}
+    ds = xr.Dataset(data)
+
+    ds_yt = ds.yt.load_grid(chunksizes=5, length_unit="m")
+
+    n_grids = len(ds_yt.index.grids)
+    expected = np.prod(np.ceil(np.array(shp) / 5))
+    assert n_grids == expected
+
+    vals = ds_yt.all_data()[("stream", "test_field")]
+    assert vals.size == np.prod(shp)
+
+
+def test_chunk_tuple():
+    # uniform grid, cartesian
+    fields = {
+        "field0": ("x", "y", "z"),
+        "field1": ("x", "y", "z"),
+    }
+    dims = {"x": (0, 1, 30), "y": (0, 2, 40), "z": (-1, 0.5, 20)}
+    ds = sample_data.load_random_xr_data(fields, dims)
+    ds_yt = ds.yt.load_grid(length_unit="km", chunksizes=(30, 40, 20))
+    assert len(ds_yt.index.grids) == 1
+
+
+def test_chunk_bad_length():
+    fields = {
+        "field0": ("x", "y", "z"),
+        "field1": ("x", "y", "z"),
+    }
+    dims = {"x": (0, 1, 30), "y": (0, 2, 40), "z": (-1, 0.5, 20)}
+    ds = sample_data.load_random_xr_data(fields, dims)
+
+    with pytest.raises(ValueError, match="The number of elements in "):
+        _ = ds.yt.load_grid(length_unit="km", chunksizes=(30, 40, 20, 5))
