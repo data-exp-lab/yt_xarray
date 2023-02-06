@@ -72,6 +72,7 @@ class YtAccessor:
             sel_dict_type=sel_dict_type,
         )
         if sel_info.grid_type == _xr_to_yt._GridType.STRETCHED and use_callable:
+            # why not? this should work now, shouldnt it?
             raise NotImplementedError(
                 "Detected a stretched grid, which is not yet supported for callables."
             )
@@ -113,7 +114,9 @@ class YtAccessor:
                 self._obj, sel_info, geom, use_callable, fields, length_unit, **kwargs
             )
         elif sel_info.grid_type == _xr_to_yt._GridType.STRETCHED:
-            raise NotImplementedError("Stretched cannot set the chunksizes argument.")
+            raise NotImplementedError(
+                "Stretched grids cannot set the chunksizes argument."
+            )
         else:
             return _load_chunked_grid(
                 self._obj,
@@ -292,6 +295,11 @@ def _load_chunked_grid(
     else:
         chunksizes = np.asarray(chunksizes, dtype=int)
 
+    if sel_info.ndims != 3:
+        raise NotImplementedError(
+            "Can only load a chunked grid with 3D fields at present."
+        )
+
     geometry = geom[0]
 
     # get the global shape and bounding box
@@ -327,6 +335,8 @@ def _load_chunked_grid(
     left_edges = []
     right_edges = []
     subgrid_sizes = []
+    subgrid_start = []
+    subgrid_end = []
     for idim in range(sel_info.ndims):
 
         si_0 = si[idim] + chunksizes[idim] * np.arange(n_whl_chnk[idim])
@@ -369,18 +379,24 @@ def _load_chunked_grid(
         left_edges.append(le_0)
         right_edges.append(re_0)
         subgrid_sizes.append(subgrid_size)
+        subgrid_start.append(si_0)
+        subgrid_end.append(ei_0)
 
     # these arrays are ordered by dimension. e.g., left_edges[0] will be the
     # all first dimension left edges
     left_edges = np.meshgrid(*left_edges, indexing="ij")
     right_edges = np.meshgrid(*right_edges, indexing="ij")
     subgrid_sizes = np.meshgrid(*subgrid_sizes, indexing="ij")
+    subgrid_start = np.meshgrid(*subgrid_start, indexing="ij")
+    subgrid_end = np.meshgrid(*subgrid_end, indexing="ij")
 
     # re-organize by grid number so that, e.g., the left_edges are the usual
     # left_edges (left_edges[0] is the min x, y, z of grid 0)
     left_edges = np.column_stack([le.ravel() for le in left_edges])
     right_edges = np.column_stack([re.ravel() for re in right_edges])
     dimensions = np.column_stack([sz.ravel() for sz in subgrid_sizes])
+    subgrid_start = np.column_stack([sz.ravel() for sz in subgrid_start])
+    subgrid_end = np.column_stack([sz.ravel() for sz in subgrid_end])
 
     # now ready to build the list of grids
     if use_callable:
@@ -388,6 +404,15 @@ def _load_chunked_grid(
 
     grid_data = []
     n_grids = len(left_edges)
+
+    if use_callable is False:
+        full_field_vals = {}
+        for field in fields:
+            vals = sel_info.select_from_xr(ds_xr, field).load()
+            if interp_required:
+                vals = _xr_to_yt._interpolate_to_cell_centers(vals)
+            full_field_vals[field] = vals.values
+
     for igrid in range(n_grids):
         gdict = {
             "left_edge": left_edges[igrid],
@@ -400,13 +425,14 @@ def _load_chunked_grid(
             if use_callable:
                 gdict[field] = (reader, units)
             else:
-                vals = sel_info.select_from_xr(ds_xr, field).load()
-                if interp_required:
-                    vals = _xr_to_yt._interpolate_to_cell_centers(vals)
-                vals = vals.values
-                if sel_info.ndims == 2:
-                    vals = np.expand_dims(vals, axis=-1)
-                gdict[field] = (vals, units)
+                # NO these values need to be chunked too.
+                si = subgrid_start[igrid]
+                ei = subgrid_end[igrid]
+                # this needs to be fixed for two2 fields...
+                gridvals = full_field_vals[field][
+                    si[0] : ei[0], si[1] : ei[1], si[2] : ei[2]
+                ]
+                gdict[field] = (gridvals, units)
         grid_data.append(gdict)
 
     return yt.load_amr_grids(

@@ -30,3 +30,14 @@ interpolating to cell centers. This is done on the fly as data is loaded (so
 there is no need to interpolate beforehand) and it actually relies on xarray's
 interpolation procedures (which in turn rely on scipy). Interpolation is limited
 to linear interpolation at present.
+
+Chunked Grids
+#############
+
+For uniform grids, yt_xarray can also load data in chunks. In this case, each
+chunk will correspond to a yt grid object, and yt functions will process chunks
+sequentially to avoid having to load data fully in memory. This means that if
+the xarray dataset relies on dask arrays, then yt will only have to load in a
+subset of the whole dataset. At present the chunking is not a one to one match,
+meaning that multiple dask chunks may be contained within a yt grid object, see the
+examples for a more detailed look.
