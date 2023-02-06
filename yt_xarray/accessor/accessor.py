@@ -131,7 +131,7 @@ class YtAccessor:
 
     def _infer_length_unit(self):
         if self.geometry == "geodetic":
-            return 1
+            return 1.0
         elif hasattr(self._obj, "geospatial_vertical_units"):
             # some netcdf conventions have this!
             return self._obj.geospatial_vertical_units
@@ -246,7 +246,7 @@ def _load_single_grid(
             vals = sel_info.select_from_xr(ds_xr, field).load()
             if interp_required:
                 vals = _xr_to_yt._interpolate_to_cell_centers(vals)
-            vals = vals.values
+            vals = vals.values.astype(np.float64)
             if sel_info.ndims == 2:
                 vals = np.expand_dims(vals, axis=-1)
             data[field] = (vals, units)
@@ -411,7 +411,7 @@ def _load_chunked_grid(
             vals = sel_info.select_from_xr(ds_xr, field).load()
             if interp_required:
                 vals = _xr_to_yt._interpolate_to_cell_centers(vals)
-            full_field_vals[field] = vals.values
+            full_field_vals[field] = vals.values.astype(np.float64)
 
     for igrid in range(n_grids):
         gdict = {
