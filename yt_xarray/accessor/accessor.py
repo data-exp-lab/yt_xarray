@@ -26,6 +26,7 @@ class YtAccessor:
         use_callable: bool = True,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
+        chunksizes: Optional[int] = None,
         **kwargs,
     ):
         """
@@ -71,6 +72,7 @@ class YtAccessor:
             sel_dict_type=sel_dict_type,
         )
         if sel_info.grid_type == _xr_to_yt._GridType.STRETCHED and use_callable:
+            # why not? this should work now, shouldnt it?
             raise NotImplementedError(
                 "Detected a stretched grid, which is not yet supported for callables."
             )
@@ -107,64 +109,23 @@ class YtAccessor:
             simtime = unyt_quantity(int(simtime), "ns")
         kwargs.update({"sim_time": simtime})
 
-        interp_required, data_shp, bbox = sel_info.interp_validation(geometry)
-        g_dict = sel_info.grid_dict.copy()
-        g_dict["dimensions"] = data_shp
-        g_dict["left_edge"] = bbox[:, 0]
-        g_dict["right_edge"] = bbox[:, 1]
-
-        if sel_info.ndims == 2:
-            axis_order = geom[1]
-            axis_order = _xr_to_yt._add_3rd_axis_name(geom[0], axis_order)
-            geom = (geom[0], axis_order)
-            data_shp = data_shp + (1,)
-            bbox = np.vstack([bbox, [-0.5, 0.5]])
-
-        data = {}
-        if use_callable:
-            reader = _get_xarray_reader(
-                self._obj, sel_info, interp_required=interp_required
+        if chunksizes is None:
+            return _load_single_grid(
+                self._obj, sel_info, geom, use_callable, fields, length_unit, **kwargs
             )
-
-        for field in fields:
-            units = sel_info.units[field]
-            if use_callable:
-                data[field] = (reader, units)
-            else:
-                vals = sel_info.select_from_xr(self._obj, field).load()
-                if interp_required:
-                    vals = _xr_to_yt._interpolate_to_cell_centers(vals)
-                vals = vals.values
-                if sel_info.ndims == 2:
-                    vals = np.expand_dims(vals, axis=-1)
-                data[field] = (vals, units)
-
-        if sel_info.ndims == 2:
-            g_dict["left_edge"] = np.append(g_dict["left_edge"], -0.5)
-            g_dict["right_edge"] = np.append(g_dict["right_edge"], 0.5)
-            g_dict["dimensions"] += (1,)
-
-        if sel_info.grid_type == _xr_to_yt._GridType.STRETCHED:
-            return yt.load_uniform_grid(
-                data,
-                data_shp,
-                geometry=geom,
-                bbox=bbox,
-                length_unit=length_unit,
-                cell_widths=sel_info.cell_widths,
-                **kwargs,
+        elif sel_info.grid_type == _xr_to_yt._GridType.STRETCHED:
+            raise NotImplementedError(
+                "Stretched grids cannot set the chunksizes argument."
             )
         else:
-            data.update(g_dict)
-            grid_data = [
-                data,
-            ]
-            return yt.load_amr_grids(
-                grid_data,
-                data_shp,
-                geometry=geom,
-                bbox=bbox,
-                length_unit=length_unit,
+            return _load_chunked_grid(
+                self._obj,
+                sel_info,
+                geom,
+                use_callable,
+                fields,
+                length_unit,
+                chunksizes,
                 **kwargs,
             )
 
@@ -252,3 +213,233 @@ class YtAccessor:
             self._obj, fields=[field], sel_dict=sel_dict, sel_dict_type=sel_dict_type
         )
         return sel_info.selected_bbox
+
+
+def _load_single_grid(
+    ds_xr, sel_info, geom, use_callable, fields, length_unit, **kwargs
+):
+
+    geometry = geom[0]
+
+    interp_required, data_shp, bbox = sel_info.interp_validation(geometry)
+    g_dict = sel_info.grid_dict.copy()
+    g_dict["dimensions"] = data_shp
+    g_dict["left_edge"] = bbox[:, 0]
+    g_dict["right_edge"] = bbox[:, 1]
+
+    if sel_info.ndims == 2:
+        axis_order = geom[1]
+        axis_order = _xr_to_yt._add_3rd_axis_name(geom[0], axis_order)
+        geom = (geom[0], axis_order)
+        data_shp = data_shp + (1,)
+        bbox = np.vstack([bbox, [-0.5, 0.5]])
+
+    data = {}
+    if use_callable:
+        reader = _get_xarray_reader(ds_xr, sel_info, interp_required=interp_required)
+
+    for field in fields:
+        units = sel_info.units[field]
+        if use_callable:
+            data[field] = (reader, units)
+        else:
+            vals = sel_info.select_from_xr(ds_xr, field).load()
+            if interp_required:
+                vals = _xr_to_yt._interpolate_to_cell_centers(vals)
+            vals = vals.values
+            if sel_info.ndims == 2:
+                vals = np.expand_dims(vals, axis=-1)
+            data[field] = (vals, units)
+
+    if sel_info.ndims == 2:
+        g_dict["left_edge"] = np.append(g_dict["left_edge"], -0.5)
+        g_dict["right_edge"] = np.append(g_dict["right_edge"], 0.5)
+        g_dict["dimensions"] += (1,)
+
+    if sel_info.grid_type == _xr_to_yt._GridType.STRETCHED:
+        return yt.load_uniform_grid(
+            data,
+            data_shp,
+            geometry=geom,
+            bbox=bbox,
+            length_unit=length_unit,
+            cell_widths=sel_info.cell_widths,
+            **kwargs,
+        )
+    else:
+        data.update(g_dict)
+        grid_data = [
+            data,
+        ]
+        return yt.load_amr_grids(
+            grid_data,
+            data_shp,
+            geometry=geom,
+            bbox=bbox,
+            length_unit=length_unit,
+            **kwargs,
+        )
+
+
+def _load_chunked_grid(
+    ds_xr, sel_info, geom, use_callable, fields, length_unit, chunksizes, **kwargs
+):
+
+    if isinstance(chunksizes, int):
+        chunksizes = np.array((chunksizes,) * sel_info.ndims)
+    elif len(chunksizes) != sel_info.ndims:
+        raise ValueError(
+            f"The number of elements in chunksizes {len(chunksizes)} "
+            f"must match the dimensionality {sel_info.ndims}"
+        )
+    else:
+        chunksizes = np.asarray(chunksizes, dtype=int)
+
+    if sel_info.ndims != 3:
+        raise NotImplementedError(
+            "Can only load a chunked grid with 3D fields at present."
+        )
+
+    geometry = geom[0]
+
+    # get the global shape and bounding box
+    interp_required, data_shp, bbox = sel_info.interp_validation(geometry)
+
+    # note: if interp_required, data_shp is number of cells
+    # otherwise it is number of nodes (which are treated as new cell centers).
+    # the bbox will already account for this as well.
+
+    # do some grid/chunk counting
+    n_chnk = np.asarray(data_shp) / chunksizes  # may not be int
+    n_whl_chnk = np.floor(n_chnk).astype(int)  # whole chunks in each dim
+    n_part_chnk = np.ceil(n_chnk - n_whl_chnk).astype(int)  # partial chunks
+
+    n_tots = np.prod(n_part_chnk + n_whl_chnk)
+    ytxr_log.info(f"Constructing a yt chunked grid with {n_tots} chunks.")
+
+    # initialize the global starting index
+    si = np.array([0, 0, 0], dtype=int)
+    si = sel_info.starting_indices + si
+
+    # select field for grabbing coordinate arrays -- fields should all be
+    # verified by now
+    fld = fields[0]
+    cnames = sel_info.selected_coords
+
+    if interp_required is False:
+        dxyz = np.array([cell_wids[0] for cell_wids in sel_info.cell_widths])
+
+    # build arrays of the left_edges, right_edges and dimensions. these will
+    # be organized by dimension first (all of the left edges in x, all
+    # the left edges in y, etc.)
+    left_edges = []
+    right_edges = []
+    subgrid_sizes = []
+    subgrid_start = []
+    subgrid_end = []
+    for idim in range(sel_info.ndims):
+
+        si_0 = si[idim] + chunksizes[idim] * np.arange(n_whl_chnk[idim])
+        ei_0 = si_0 + chunksizes[idim]
+
+        if n_part_chnk[idim] == 1:
+            si_0_partial = ei_0[-1]
+            ei_0_partial = data_shp[idim] - si_0_partial
+            si_0 = np.concatenate(
+                [
+                    si_0,
+                    [
+                        si_0_partial,
+                    ],
+                ]
+            )
+            ei_0 = np.concatenate(
+                [
+                    ei_0,
+                    [
+                        ei_0[-1] + ei_0_partial,
+                    ],
+                ]
+            )
+
+        c = cnames[idim]
+        le_0 = ds_xr[fld].coords[c].isel({c: si_0}).values
+        if interp_required is False:
+            # the left edges get bumped left since we are reading values
+            # again.
+            le_0 = le_0 - dxyz[idim] / 2.0
+
+        # bbox value below already accounts for interp_required, no need to shift
+        max_val = bbox[idim, 1]
+        re_0 = np.concatenate([le_0[1:], [max_val]])
+
+        # sizes also already account for interp_required
+        subgrid_size = ei_0 - si_0
+
+        left_edges.append(le_0)
+        right_edges.append(re_0)
+        subgrid_sizes.append(subgrid_size)
+        subgrid_start.append(si_0)
+        subgrid_end.append(ei_0)
+
+    # these arrays are ordered by dimension. e.g., left_edges[0] will be the
+    # all first dimension left edges
+    left_edges = np.meshgrid(*left_edges, indexing="ij")
+    right_edges = np.meshgrid(*right_edges, indexing="ij")
+    subgrid_sizes = np.meshgrid(*subgrid_sizes, indexing="ij")
+    subgrid_start = np.meshgrid(*subgrid_start, indexing="ij")
+    subgrid_end = np.meshgrid(*subgrid_end, indexing="ij")
+
+    # re-organize by grid number so that, e.g., the left_edges are the usual
+    # left_edges (left_edges[0] is the min x, y, z of grid 0)
+    left_edges = np.column_stack([le.ravel() for le in left_edges])
+    right_edges = np.column_stack([re.ravel() for re in right_edges])
+    dimensions = np.column_stack([sz.ravel() for sz in subgrid_sizes])
+    subgrid_start = np.column_stack([sz.ravel() for sz in subgrid_start])
+    subgrid_end = np.column_stack([sz.ravel() for sz in subgrid_end])
+
+    # now ready to build the list of grids
+    if use_callable:
+        reader = _get_xarray_reader(ds_xr, sel_info, interp_required=interp_required)
+
+    grid_data = []
+    n_grids = len(left_edges)
+
+    if use_callable is False:
+        full_field_vals = {}
+        for field in fields:
+            vals = sel_info.select_from_xr(ds_xr, field).load()
+            if interp_required:
+                vals = _xr_to_yt._interpolate_to_cell_centers(vals)
+            full_field_vals[field] = vals.values
+
+    for igrid in range(n_grids):
+        gdict = {
+            "left_edge": left_edges[igrid],
+            "right_edge": right_edges[igrid],
+            "dimensions": dimensions[igrid],
+            "level": 0,
+        }
+        for field in fields:
+            units = sel_info.units[field]
+            if use_callable:
+                gdict[field] = (reader, units)
+            else:
+                # NO these values need to be chunked too.
+                si = subgrid_start[igrid]
+                ei = subgrid_end[igrid]
+                # this needs to be fixed for two2 fields...
+                gridvals = full_field_vals[field][
+                    si[0] : ei[0], si[1] : ei[1], si[2] : ei[2]
+                ]
+                gdict[field] = (gridvals, units)
+        grid_data.append(gdict)
+
+    return yt.load_amr_grids(
+        grid_data,
+        data_shp,
+        geometry=geom,
+        bbox=bbox,
+        length_unit=length_unit,
+        **kwargs,
+    )

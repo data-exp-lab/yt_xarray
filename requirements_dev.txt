@@ -14,3 +14,4 @@ scipy
 pytest==6.2.4
 pytest-cov
 nbsphinx
+dask[complete]

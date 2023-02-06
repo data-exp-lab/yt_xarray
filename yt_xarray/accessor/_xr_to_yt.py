@@ -129,7 +129,6 @@ class Selection:
         coord_list = []  # the coord list after selection
         starting_indices = []  # global starting index
         cell_widths = []  # cell widths after selection
-
         grid_type = _GridType.UNIFORM  # start with uniform assumption
         for c in full_coords:
             coord_da = getattr(xr_ds, c)  # the full coordinate data array
@@ -155,6 +154,7 @@ class Selection:
                 n_edges.append(coord_vals.size)
                 n_cells.append(coord_vals.size - 1)
                 coord_list.append(c)
+                # coord_selected_arrays[c] = coord_vals
                 starting_indices.append(si)
 
                 if is_time_dim:
@@ -188,6 +188,7 @@ class Selection:
         self.selected_time = time
         self.grid_type = grid_type
         self.cell_widths = cell_widths
+        # self.coord_selected_arrays = coord_selected_arrays
 
         # set the yt grid dictionary
         self.grid_dict = {
@@ -250,8 +251,9 @@ class Selection:
         elif self.grid_type == _GridType.UNIFORM:
             dxyz = np.array([cell_wids[0] for cell_wids in self.cell_widths])
             bbox = self.selected_bbox.copy()
+            bbox_wid = bbox[:, 1] - bbox[:, 0]
             bbox[:, 0] = bbox[:, 0] - dxyz / 2
-            bbox[:, 1] = bbox[:, 0] + dxyz / 2
+            bbox[:, 1] = bbox[:, 0] + bbox_wid + dxyz
             if geometry == "cartesian":
                 # OK to wrap in a pseudo-grid, offset bounds by +/- 1/2 cell
                 # spacing, return number of nodes as the number of cells for
