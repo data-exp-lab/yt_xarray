@@ -64,7 +64,7 @@ def _get_xarray_reader(
             datavals = _xr_to_yt._interpolate_to_cell_centers(datavals)
 
         # return the plain values
-        vals = datavals.values
+        vals = datavals.values.astype(np.float64)
         if sel_info.ndims == 2:
             vals = np.expand_dims(vals, axis=-1)
         return vals

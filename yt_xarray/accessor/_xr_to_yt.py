@@ -145,7 +145,7 @@ class Selection:
                 si = self._find_starting_index(c, coord_da, coord_select)
 
             sel_or_isel = getattr(coord_da, self.sel_dict_type)
-            coord_vals = sel_or_isel(coord_select).values
+            coord_vals = sel_or_isel(coord_select).values.astype(np.float64)
             is_time_dim = _check_for_time(c, coord_vals)
 
             if coord_vals.size > 1:
@@ -180,8 +180,8 @@ class Selection:
         self.ndims = len(n_edges)
         self.selected_shape = tuple(n_edges)
         self.select_shape_cells = tuple(n_cells)
-        self.full_bbox = np.array(full_dimranges)
-        self.selected_bbox = np.array(dimranges)
+        self.full_bbox = np.array(full_dimranges).astype(np.float64)
+        self.selected_bbox = np.array(dimranges).astype(np.float64)
         self.full_coords = tuple(full_coords)
         self.selected_coords = tuple(coord_list)
         self.starting_indices = np.array(starting_indices)

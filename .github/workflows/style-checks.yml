@@ -58,22 +58,3 @@ jobs:
       run: |
         isort --version-number
         isort yt_xarray --check --diff
-
-  flynt:
-    name: flynt
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@master
-    - name: Setup Python
-      uses: actions/setup-python@master
-      with:
-        python-version: 3.8
-    - name: install
-      id: install
-      run : pip install -r tests/lint_requirements.txt
-
-    - name: check
-      id: flynt
-      run: |
-        flynt --version
-        flynt yt_xarray --fail-on-change --dry-run

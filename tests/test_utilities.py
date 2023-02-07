@@ -1,3 +1,4 @@
+import numpy as np
 import xarray as xr
 import yt
 
@@ -29,6 +30,13 @@ def test_construct_minimal_ds():
     assert xr2yt._check_grid_stretchiness(ds.x.values) == xr2yt._GridType.UNIFORM
     assert xr2yt._check_grid_stretchiness(ds.y.values) == xr2yt._GridType.STRETCHED
     assert xr2yt._check_grid_stretchiness(ds.z.values) == xr2yt._GridType.STRETCHED
+
+
+def test_float32_ds():
+    # float32 must be upcast for grid positions. This only manifested when
+    # using a stretched grid (as the cell_widths were in float32).
+    ds = construct_minimal_ds(dtype="float32", x_stretched=True)
+    assert ds.test_field.dtype == np.float32
 
 
 def test_file_validation(tmp_path):

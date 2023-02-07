@@ -28,10 +28,13 @@ def construct_minimal_ds(
     field_name: str = "test_field",
     n_fields: int = 1,
     coord_order: Optional[Tuple[str, str, str]] = None,
+    dtype: str = "float64",
 ) -> xr.Dataset:
 
     if coord_order is None:
         coord_order = ("z", "y", "x")
+
+    dtype_to_use = getattr(np, dtype)
 
     # contruct and return a minimal xarray dataset to use in tests as needed
 
@@ -70,12 +73,12 @@ def construct_minimal_ds(
         if is_stretched[cdict[cname]]:
             dx = cvals[1:] - cvals[:-1]
             cvals[int(n / 2) :] = cvals[int(n / 2) :] + dx[0] * 2.0
-        coords[cdict[cname]] = cvals
+        coords[cdict[cname]] = cvals.astype(dtype_to_use)
         coord_arrays.append(coords[cdict[cname]])
         coord_order_rn += (cdict[cname],)
         var_shape += (n,)
 
-    vals = np.random.random(var_shape)
+    vals = np.random.random(var_shape).astype(dtype_to_use)
     if n_fields > 1:
         data_vars = {}
         for i in range(n_fields):
