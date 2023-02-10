@@ -11,11 +11,14 @@ loaded via xarray.
 Presently, yt_xarray primarily adds methods to generate a yt dataset from a
 subset of xarray dataset fields, without making copies of data when possible.
 
-To get started check out the following pages:
+After installing, the easiest way to get started is to peruse the
+:ref:`Example Notebooks`.
+If you come across any issues or have feature requests, please reach out at the
+`yt_xarray github repository <https://github.com/data-exp-lab/yt_xarray/>`_!
 
 .. toctree::
+   :hidden:
    :maxdepth: 2
-   :caption: Contents:
 
    installation
    supported_grids
@@ -24,8 +27,3 @@ To get started check out the following pages:
    API <modules>
    contributing
 
-Indices and tables
-==================
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
