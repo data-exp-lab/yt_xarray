@@ -50,7 +50,7 @@ coordinate aliasing (see `above <#unknown-coordinate-names>`_), it is important 
 will successfully run, the results may  be unexpected. Many of yt's analysis routines
 involve projecting or volume-averaging, which would yield incorrect results when
 treating, for example, a pressure-coordinate as a length. Generally, the functionality
-that will work is that related to data selection such as plotting slices (``yt.SlicePlot()`),
+that will work is that related to data selection such as plotting slices (``yt.SlicePlot()``),
 subselecting data or finding extrema. Some methods, like ``yt.PhasePlot()`` may work
 if care is taken to set the averaging keyword arguments appropriately.
 

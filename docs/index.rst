@@ -21,7 +21,7 @@ To get started check out the following pages:
    supported_grids
    examples
    faq
-   modules
+   API <modules>
    contributing
 
 Indices and tables
