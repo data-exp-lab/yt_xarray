@@ -1,5 +1,14 @@
 # History
 
+## 0.1.2 (2022-02-27)
+
+Bug fix release.
+
+### Fixes:
+* fixes handling of xarray variables with dimensions in decreasing
+  order (e.g., latitude from 90 to -90) without
+having to re-index the whole variable (PR [39](https://github.com/data-exp-lab/yt_xarray/pull/39)).
+
 ## 0.1.1 (2022-02-07)
 
 This release builds out the loading functions introduced in v0.1.0 and includes

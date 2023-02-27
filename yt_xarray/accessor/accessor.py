@@ -8,6 +8,7 @@ from unyt import unyt_quantity
 
 from yt_xarray.accessor import _xr_to_yt
 from yt_xarray.accessor._readers import _get_xarray_reader
+from yt_xarray.accessor._xr_to_yt import _load_full_field_from_xr
 from yt_xarray.utilities.logging import ytxr_log
 
 
@@ -243,12 +244,9 @@ def _load_single_grid(
         if use_callable:
             data[field] = (reader, units)
         else:
-            vals = sel_info.select_from_xr(ds_xr, field).load()
-            if interp_required:
-                vals = _xr_to_yt._interpolate_to_cell_centers(vals)
-            vals = vals.values.astype(np.float64)
-            if sel_info.ndims == 2:
-                vals = np.expand_dims(vals, axis=-1)
+            vals = _load_full_field_from_xr(
+                ds_xr, field, sel_info, interp_required=interp_required
+            )
             data[field] = (vals, units)
 
     if sel_info.ndims == 2:
@@ -363,15 +361,24 @@ def _load_chunked_grid(
             )
 
         c = cnames[idim]
-        le_0 = ds_xr[fld].coords[c].isel({c: si_0}).values
-        if interp_required is False:
-            # the left edges get bumped left since we are reading values
-            # again.
-            le_0 = le_0 - dxyz[idim] / 2.0
+        rev_ax = sel_info.reverse_axis[idim]
+        if rev_ax is False:
+            le_0 = ds_xr[fld].coords[c].isel({c: si_0}).values
+            if interp_required is False:
+                # move the edges so the node is now a cell center
+                le_0 = le_0 - dxyz[idim] / 2.0
 
-        # bbox value below already accounts for interp_required, no need to shift
-        max_val = bbox[idim, 1]
-        re_0 = np.concatenate([le_0[1:], [max_val]])
+            # bbox value below already accounts for interp_required
+            max_val = bbox[idim, 1]
+            re_0 = np.concatenate([le_0[1:], [max_val]])
+
+        else:
+            re_0 = ds_xr[fld].coords[c].isel({c: si_0[::-1]}).values
+            if interp_required is False:
+                # move the edges so the node is now a cell center
+                re_0 = re_0 - dxyz[idim] / 2.0
+            min_val = bbox[idim, 0]
+            le_0 = np.concatenate([[min_val], re_0[:-1]])
 
         # sizes also already account for interp_required
         subgrid_size = ei_0 - si_0
@@ -408,10 +415,10 @@ def _load_chunked_grid(
     if use_callable is False:
         full_field_vals = {}
         for field in fields:
-            vals = sel_info.select_from_xr(ds_xr, field).load()
-            if interp_required:
-                vals = _xr_to_yt._interpolate_to_cell_centers(vals)
-            full_field_vals[field] = vals.values.astype(np.float64)
+            vals = _load_full_field_from_xr(
+                ds_xr, field, sel_info, interp_required=interp_required
+            )
+            full_field_vals[field] = vals
 
     for igrid in range(n_grids):
         gdict = {
@@ -425,10 +432,8 @@ def _load_chunked_grid(
             if use_callable:
                 gdict[field] = (reader, units)
             else:
-                # NO these values need to be chunked too.
                 si = subgrid_start[igrid]
                 ei = subgrid_end[igrid]
-                # this needs to be fixed for two2 fields...
                 gridvals = full_field_vals[field][
                     si[0] : ei[0], si[1] : ei[1], si[2] : ei[2]
                 ]
