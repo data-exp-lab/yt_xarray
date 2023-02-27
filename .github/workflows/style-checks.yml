@@ -6,11 +6,11 @@ jobs:
     name: flake8
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@master
+    - uses: actions/checkout@v3
     - name: Setup Python
-      uses: actions/setup-python@master
+      uses: actions/setup-python@v4
       with:
-        python-version: 3.8
+        python-version: 3.9
     - name: install
       id: install
       run : pip install -r tests/lint_requirements.txt
@@ -25,11 +25,11 @@ jobs:
     name: black
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@master
+    - uses: actions/checkout@v3
     - name: Setup Python
-      uses: actions/setup-python@master
+      uses: actions/setup-python@v4
       with:
-        python-version: 3.8
+        python-version: 3.9
     - name: install
       id: install
       run : pip install -r tests/lint_requirements.txt
@@ -44,11 +44,11 @@ jobs:
     name: isort
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@master
+    - uses: actions/checkout@v3
     - name: Setup Python
-      uses: actions/setup-python@master
+      uses: actions/setup-python@v4
       with:
-        python-version: 3.8
+        python-version: 3.9
     - name: install
       id: install
       run : pip install -r tests/lint_requirements.txt
