@@ -479,3 +479,53 @@ def test_add_3rd_axis_name(yt_geom):
 
     with pytest.raises(ValueError, match="Unsupported geometry type"):
         _ = xr2yt._add_3rd_axis_name("bad_geometry", expected[:-1])
+
+
+@pytest.mark.parametrize(
+    "stretched,use_callable,chunksizes",
+    [
+        (True, False, None),
+        (False, False, None),
+        (False, True, None),
+        (False, True, 10),
+        (False, False, 10),
+    ],
+)
+def test_reversed_axis(stretched, use_callable, chunksizes):
+    # tests for when the incoming data is not positive-monotonic
+
+    ds = construct_minimal_ds(
+        min_x=1,
+        max_x=359,
+        min_z=50,
+        max_z=650,
+        min_y=89,
+        max_y=-89,
+        n_x=50,
+        n_y=100,
+        n_z=30,
+        z_stretched=stretched,
+    )
+    yt_ds = ds.yt.load_grid(use_callable=use_callable, chunksizes=chunksizes)
+
+    if stretched:
+        grid_obj = yt_ds.index.grids[0]
+        ax_id = yt_ds.coordinates.axis_id["latitude"]
+        assert np.all(grid_obj.cell_widths[ax_id] > 0)
+
+    slc = yt_ds.slice(
+        yt_ds.coordinates.axis_id["depth"],
+        yt_ds.domain_center[yt_ds.coordinates.axis_id["depth"]],
+        center=yt_ds.domain_center,
+    )
+    pdy_lats = slc._generate_container_field("pdy")
+    assert np.all(pdy_lats > 0)
+
+    vals = yt_ds.coordinates.pixelize(
+        0,
+        slc,
+        ("stream", "test_field"),
+        yt_ds.arr([1, 359, -89, 89], "code_length"),
+        (400, 400),
+    )
+    assert np.all(np.isfinite(vals))

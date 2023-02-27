@@ -27,6 +27,7 @@ def _get_xarray_reader(
 
         si = grid.get_global_startindex() + gsi
         ei = si + grid.ActiveDimensions
+        global_dims = sel_info.global_dims.copy()
         if interp_required:
             # if interpolating, si and ei must be node indices so
             # we offset by an additional element
@@ -37,7 +38,22 @@ def _get_xarray_reader(
         c_list = sel_info.selected_coords  # the xarray coord names
         i_select_dict = {}
         for idim in range(sel_info.ndims):
-            i_select_dict[c_list[idim]] = slice(si[idim], ei[idim])
+            if sel_info.reverse_axis[idim]:
+                # the xarray axis is in negative ordering. a yt index of
+                # 0 should point to the maximum index in xarray
+                si_idim = global_dims[idim] - si[idim]
+                ei_idim = global_dims[idim] - ei[idim]
+                # when reverse slicing, the final index will not be included...
+                # if the end index is within bounds, just bump it by one more,
+                # otherwise if end index is already 0, just pass in None to
+                # slice
+                if ei_idim > 0:
+                    ei_idim = ei_idim - 1
+                elif ei_idim == 0:
+                    ei_idim = None
+                i_select_dict[c_list[idim]] = slice(si_idim, ei_idim, -1)
+            else:
+                i_select_dict[c_list[idim]] = slice(si[idim], ei[idim])
 
         # set any of the initial selections that will reduce the
         # dimensionality or size of the full DataArray

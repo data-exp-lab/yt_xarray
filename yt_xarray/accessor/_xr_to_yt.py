@@ -54,6 +54,7 @@ class Selection:
         self.ndims: int = None
         self.grid_type = None  # one of _GridType members
         self.cell_widths: list = None
+        self.global_dims: list = None
         self._process_selection(xr_ds)
 
         self.yt_coord_names = _convert_to_yt_internal_coords(self.selected_coords)
@@ -130,9 +131,13 @@ class Selection:
         starting_indices = []  # global starting index
         cell_widths = []  # cell widths after selection
         grid_type = _GridType.UNIFORM  # start with uniform assumption
+        reverse_axis = []  # axes must be positive-monitonic for yt
+        global_dims = []
         for c in full_coords:
             coord_da = getattr(xr_ds, c)  # the full coordinate data array
-
+            rev_ax = coord_da[1] <= coord_da[0]
+            reverse_axis.append(bool(rev_ax.values))
+            global_dims.append(coord_da.size)
             # store the global ranges
             global_min = float(coord_da.min().values)
             global_max = float(coord_da.max().values)
@@ -146,6 +151,8 @@ class Selection:
 
             sel_or_isel = getattr(coord_da, self.sel_dict_type)
             coord_vals = sel_or_isel(coord_select).values.astype(np.float64)
+            if reverse_axis[-1]:
+                coord_vals = coord_vals[::-1]
             is_time_dim = _check_for_time(c, coord_vals)
 
             if coord_vals.size > 1:
@@ -188,6 +195,8 @@ class Selection:
         self.selected_time = time
         self.grid_type = grid_type
         self.cell_widths = cell_widths
+        self.reverse_axis = reverse_axis
+        self.global_dims = np.array(global_dims)
         # self.coord_selected_arrays = coord_selected_arrays
 
         # set the yt grid dictionary
