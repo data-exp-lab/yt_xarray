@@ -132,36 +132,43 @@ class Selection:
         cell_widths = []  # cell widths after selection
         grid_type = _GridType.UNIFORM  # start with uniform assumption
         reverse_axis = []  # axes must be positive-monitonic for yt
-        global_dims = []
+        global_dims = []  # the global shape
         for c in full_coords:
             coord_da = getattr(xr_ds, c)  # the full coordinate data array
+
+            # check if coordinate values are increasing
             rev_ax = coord_da[1] <= coord_da[0]
             reverse_axis.append(bool(rev_ax.values))
-            global_dims.append(coord_da.size)
+
             # store the global ranges
+            global_dims.append(coord_da.size)
             global_min = float(coord_da.min().values)
             global_max = float(coord_da.max().values)
             full_dimranges.append([global_min, global_max])
 
-            si = 0  # starting index
+            si = 0  # starting xarray-index for any pre-selections from user
             coord_select = {}  # the selection dictionary just for this coordinate
             if c in self.sel_dict:
                 coord_select[c] = self.sel_dict[c]
                 si = self._find_starting_index(c, coord_da, coord_select)
 
+            # apply any selections and extract coordinates
             sel_or_isel = getattr(coord_da, self.sel_dict_type)
             coord_vals = sel_or_isel(coord_select).values.astype(np.float64)
-            if reverse_axis[-1]:
-                coord_vals = coord_vals[::-1]
             is_time_dim = _check_for_time(c, coord_vals)
 
             if coord_vals.size > 1:
+
+                # not positive-monotonic? reverse it for cell width calculations
+                # changes to indexing are accounted for when extracting data.
+                if reverse_axis[-1]:
+                    coord_vals = coord_vals[::-1]
+
                 cell_widths.append(coord_vals[1:] - coord_vals[:-1])
                 dimranges.append([coord_vals.min(), coord_vals.max()])
                 n_edges.append(coord_vals.size)
                 n_cells.append(coord_vals.size - 1)
                 coord_list.append(c)
-                # coord_selected_arrays[c] = coord_vals
                 starting_indices.append(si)
 
                 if is_time_dim:
@@ -422,3 +429,23 @@ def _interpolate_to_cell_centers(data: xr.DataArray):
         dimvals = data.coords[dim].values
         interp_dict[dim] = (dimvals[1:] + dimvals[:-1]) / 2.0
     return data.interp(interp_dict)
+
+
+def _load_full_field_from_xr(
+    ds_xr, field: str, sel_info: Selection, interp_required: bool = False
+):
+    vals = sel_info.select_from_xr(ds_xr, field).load()
+
+    if interp_required:
+        vals = _interpolate_to_cell_centers(vals)
+    if any(sel_info.reverse_axis):
+        # if any dims are in decreaseing order, flip that axis
+        # after reading in the data
+        for idim, flip_it in enumerate(sel_info.reverse_axis):
+            if flip_it:
+                vals = np.flip(vals, axis=idim)
+
+    vals = vals.values.astype(np.float64)
+    if sel_info.ndims == 2:
+        vals = np.expand_dims(vals, axis=-1)
+    return vals

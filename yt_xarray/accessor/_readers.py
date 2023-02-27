@@ -18,42 +18,48 @@ def _get_xarray_reader(
         # grid: a yt grid object
         _, fname = field_name
 
-        # this global start index accounts for indexing after any
+        # first get the internal yt index ranges
+        si = grid.get_global_startindex()
+        ei = si + grid.ActiveDimensions
+
+        # convert to the xarray indexing in 3 steps
+        # 1. account for dimension direction
+        # 2. account for any prior xarray subselections
+        # 3. account for interpolation requirements
+
+        # step 1 (if axis has been reversed, node ordering is also reversed)
+        for idim in range(sel_info.ndims):
+            if sel_info.reverse_axis[idim]:
+                # note that the si, ei are exchanged!
+                si0 = si.copy()
+                ei0 = ei.copy()
+                si[idim] = sel_info.global_dims[idim] - ei0[idim]
+                ei[idim] = sel_info.global_dims[idim] - si0[idim]
+
+        # step 2: this global start index accounts for indexing after any
         # subselections on the xarray DataArray are made. might
         # be a way to properly set this with yt grid objects.
         gsi = sel_info.starting_indices
         if sel_info.ndims == 2:
             gsi = np.append(gsi, 0)
+        si = si + gsi
+        ei = ei + gsi
 
-        si = grid.get_global_startindex() + gsi
-        ei = si + grid.ActiveDimensions
-        global_dims = sel_info.global_dims.copy()
+        # step 3: if we are interpolating to cell centers, grab some extra nodes
         if interp_required:
-            # if interpolating, si and ei must be node indices so
-            # we offset by an additional element
-            cell_to_node_offset = np.ones((3,), dtype=int)
-            ei = ei + cell_to_node_offset
+            for idim in range(sel_info.ndims):
+                if sel_info.reverse_axis[idim]:
+                    si[idim] = si[idim] - 1
+                else:
+                    ei[idim] = ei[idim] + 1
 
-        # build the index-selector for our yt grid object
+        # now we can select the data (still accounting for any dimension reversal)
+
+        # build the index-selector for each dimension
         c_list = sel_info.selected_coords  # the xarray coord names
         i_select_dict = {}
         for idim in range(sel_info.ndims):
-            if sel_info.reverse_axis[idim]:
-                # the xarray axis is in negative ordering. a yt index of
-                # 0 should point to the maximum index in xarray
-                si_idim = global_dims[idim] - si[idim]
-                ei_idim = global_dims[idim] - ei[idim]
-                # when reverse slicing, the final index will not be included...
-                # if the end index is within bounds, just bump it by one more,
-                # otherwise if end index is already 0, just pass in None to
-                # slice
-                if ei_idim > 0:
-                    ei_idim = ei_idim - 1
-                elif ei_idim == 0:
-                    ei_idim = None
-                i_select_dict[c_list[idim]] = slice(si_idim, ei_idim, -1)
-            else:
-                i_select_dict[c_list[idim]] = slice(si[idim], ei[idim])
+            i_select_dict[c_list[idim]] = slice(si[idim], ei[idim])
 
         # set any of the initial selections that will reduce the
         # dimensionality or size of the full DataArray
@@ -78,6 +84,11 @@ def _get_xarray_reader(
         if interp_required:
             # interpolate from nodes to cell centers across all remaining dims
             datavals = _xr_to_yt._interpolate_to_cell_centers(datavals)
+
+        # final flips to account for all the index reversing
+        for idim in range(sel_info.ndims):
+            if sel_info.reverse_axis[idim]:
+                datavals = np.flip(datavals, axis=idim)
 
         # return the plain values
         vals = datavals.values.astype(np.float64)

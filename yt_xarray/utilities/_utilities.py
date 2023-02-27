@@ -29,6 +29,7 @@ def construct_minimal_ds(
     n_fields: int = 1,
     coord_order: Optional[Tuple[str, str, str]] = None,
     dtype: str = "float64",
+    npseed: bool = False,
 ) -> xr.Dataset:
 
     if coord_order is None:
@@ -77,6 +78,9 @@ def construct_minimal_ds(
         coord_arrays.append(coords[cdict[cname]])
         coord_order_rn += (cdict[cname],)
         var_shape += (n,)
+
+    if npseed:
+        np.random.seed(0)
 
     vals = np.random.random(var_shape).astype(dtype_to_use)
     if n_fields > 1:
