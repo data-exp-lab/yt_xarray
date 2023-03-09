@@ -137,8 +137,9 @@ class Selection:
             coord_da = getattr(xr_ds, c)  # the full coordinate data array
 
             # check if coordinate values are increasing
-            rev_ax = coord_da[1] <= coord_da[0]
-            reverse_axis.append(bool(rev_ax.values))
+            if coord_da.size > 1:
+                rev_ax = coord_da[1] <= coord_da[0]
+                reverse_axis.append(bool(rev_ax.values))
 
             # store the global ranges
             global_dims.append(coord_da.size)
@@ -281,7 +282,7 @@ class Selection:
 
             elif geometry in ("geographic", "internal_geographic"):
                 msg = (
-                    "    Geodetic geometry bounds exceeded: yt_xarray will interpolate"
+                    "    Geodetic geometry bounds exceeded: yt_xarray will interpolate."
                 )
                 # check if still within bounds, if not, require interpolation
                 for idim, dim in enumerate(self.selected_coords):
@@ -297,7 +298,7 @@ class Selection:
                 # should be OK to pad cells
                 ytxr_log.info(
                     "    Geodetic geometry on uniform grid within geodetic "
-                    "bounds: yt_xarray will interpolate"
+                    "bounds: yt_xarray will not interpolate."
                 )
                 return False, self.selected_shape, bbox
 
