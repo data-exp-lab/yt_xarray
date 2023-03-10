@@ -33,6 +33,7 @@ setup(
     install_requires=requirements,
     license="MIT license",
     long_description=readme_md,
+    long_description_content_type="text/markdown",
     include_package_data=True,
     keywords="yt_xarray",
     name="yt_xarray",
