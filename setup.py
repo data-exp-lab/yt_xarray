@@ -7,6 +7,9 @@ from setuptools import find_packages, setup
 with open("requirements.txt") as reqs_file:
     requirements = reqs_file.read().strip().split("\n")
 
+with open("README.md", "r") as readme_file:
+    readme_md = readme_file.read()
+
 
 test_requirements = [
     "pytest>=3",
@@ -29,7 +32,7 @@ setup(
     description="interface between yt and xarray",
     install_requires=requirements,
     license="MIT license",
-    long_description="tools for connecting yt and xarray",
+    long_description=readme_md,
     include_package_data=True,
     keywords="yt_xarray",
     name="yt_xarray",
@@ -37,6 +40,6 @@ setup(
     test_suite="tests",
     tests_require=test_requirements,
     url="https://github.com/data-exp-lab/yt_xarray",
-    version="0.1.2",
+    version="0.1.3",
     zip_safe=False,
 )
