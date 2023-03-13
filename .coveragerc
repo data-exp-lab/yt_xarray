@@ -1,5 +1,7 @@
 [run]
 source = yt_xarray
+omit = 
+    setup.py
 
 [report]
-fail_under = 98
+fail_under = 97

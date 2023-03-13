@@ -1,6 +1,13 @@
 # History
 
-## 0.1.2 (2022-02-27)
+## 0.1.3 (2023-03-10)
+
+Bug fix release. 
+
+### Fixes:
+* handle the case where data coordinate lengths are 1 (PR [41](https://github.com/data-exp-lab/yt_xarray/pull/41))
+
+## 0.1.2 (2023-02-27)
 
 Bug fix release.
 
@@ -9,7 +16,7 @@ Bug fix release.
   order (e.g., latitude from 90 to -90) without
 having to re-index the whole variable (PR [39](https://github.com/data-exp-lab/yt_xarray/pull/39)).
 
-## 0.1.1 (2022-02-07)
+## 0.1.1 (2023-02-07)
 
 This release builds out the loading functions introduced in v0.1.0 and includes
 improvements to documentation
