@@ -132,6 +132,7 @@ class Selection:
         cell_widths = []  # cell widths after selection
         grid_type = _GridType.UNIFORM  # start with uniform assumption
         reverse_axis = []  # axes must be positive-monitonic for yt
+        reverse_axis_names = []
         global_dims = []  # the global shape
         for c in full_coords:
             coord_da = getattr(xr_ds, c)  # the full coordinate data array
@@ -140,6 +141,8 @@ class Selection:
             if coord_da.size > 1:
                 rev_ax = coord_da[1] <= coord_da[0]
                 reverse_axis.append(bool(rev_ax.values))
+                if rev_ax:
+                    reverse_axis_names.append(c)
 
             # store the global ranges
             global_dims.append(coord_da.size)
@@ -204,6 +207,7 @@ class Selection:
         self.grid_type = grid_type
         self.cell_widths = cell_widths
         self.reverse_axis = reverse_axis
+        self.reverse_axis_names = reverse_axis_names
         self.global_dims = np.array(global_dims)
         # self.coord_selected_arrays = coord_selected_arrays
 
@@ -250,9 +254,15 @@ class Selection:
 
     def select_from_xr(self, xr_ds, field):
         if self.sel_dict_type == "isel":
-            return xr_ds[field].isel(self.sel_dict)
+            vars = xr_ds[field].isel(self.sel_dict)
         else:
-            return xr_ds[field].sel(self.sel_dict)
+            vars = xr_ds[field].sel(self.sel_dict)
+
+        for axname in self.reverse_axis_names:
+            dimvals = getattr(vars, axname)
+            vars = vars.sel({axname: dimvals[::-1]})
+
+        return vars
 
     def interp_validation(self, geometry):
         # checks if yt will need to interpolate to cell center
@@ -439,12 +449,6 @@ def _load_full_field_from_xr(
 
     if interp_required:
         vals = _interpolate_to_cell_centers(vals)
-    if any(sel_info.reverse_axis):
-        # if any dims are in decreaseing order, flip that axis
-        # after reading in the data
-        for idim, flip_it in enumerate(sel_info.reverse_axis):
-            if flip_it:
-                vals = np.flip(vals, axis=idim)
 
     vals = vals.values.astype(np.float64)
     if sel_info.ndims == 2:
