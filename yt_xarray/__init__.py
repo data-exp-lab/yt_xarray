@@ -2,7 +2,7 @@
 
 __author__ = """Chris Havlin"""
 __email__ = "chris.havlin@gmail.com"
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 
 # import the yt frontend and the xarray accessor so they are registered with
