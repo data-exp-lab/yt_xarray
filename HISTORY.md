@@ -1,8 +1,14 @@
 # History
 
+## 0.1.4 (2023-03-21)
+
+Bug fix release.
+
+### Fixes:
+* fix coordinate flipping bug (PR [46](https://github.com/data-exp-lab/yt_xarray/pull/46))
 ## 0.1.3 (2023-03-10)
 
-Bug fix release. 
+Bug fix release.
 
 ### Fixes:
 * handle the case where data coordinate lengths are 1 (PR [41](https://github.com/data-exp-lab/yt_xarray/pull/41))

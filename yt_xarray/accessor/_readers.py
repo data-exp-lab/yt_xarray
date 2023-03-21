@@ -81,14 +81,14 @@ def _get_xarray_reader(
         # load into memory (if its not) as xr DataArray
         datavals = datavals.load()
 
+        # reverse axis ordering if needed
+        for axname in sel_info.reverse_axis_names:
+            dimvals = getattr(datavals, axname)
+            datavals = datavals.sel({axname: dimvals[::-1]})
+
         if interp_required:
             # interpolate from nodes to cell centers across all remaining dims
             datavals = _xr_to_yt._interpolate_to_cell_centers(datavals)
-
-        # final flips to account for all the index reversing
-        for idim in range(sel_info.ndims):
-            if sel_info.reverse_axis[idim]:
-                datavals = np.flip(datavals, axis=idim)
 
         # return the plain values
         vals = datavals.values.astype(np.float64)

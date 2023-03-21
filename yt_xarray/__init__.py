@@ -2,11 +2,10 @@
 
 __author__ = """Chris Havlin"""
 __email__ = "chris.havlin@gmail.com"
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 
-# import the yt frontend and the xarray accessor so they are registered with
-# their respective codes
+# import the the xarray accessor so it is registered with xarray
 
 from .accessor import YtAccessor
 from .accessor._xr_to_yt import known_coord_aliases
