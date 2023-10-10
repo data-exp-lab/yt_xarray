@@ -1,5 +1,16 @@
 # History
 
+## 0.2.0 (2023-10-10)
+
+Maintenance release. Minimum python version is now 3.9.
+
+### Changes
+* improve error messaging for load_grid
+* fix deprecation warning from yt.load_amr_grids
+* consolidate to pyproject.toml
+* expand testing: all platforms, new weekly run
+* switch to pre-commit.ci
+
 ## 0.1.4 (2023-03-21)
 
 Bug fix release.
