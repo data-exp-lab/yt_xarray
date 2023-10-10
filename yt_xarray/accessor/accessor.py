@@ -75,7 +75,8 @@ class YtAccessor:
         if sel_info.grid_type == _xr_to_yt._GridType.STRETCHED and use_callable:
             # why not? this should work now, shouldnt it?
             raise NotImplementedError(
-                "Detected a stretched grid, which is not yet supported for callables."
+                "Detected a stretched grid, which is not yet supported for callables, "
+                "set use_callable=False."
             )
 
         if geometry is None:
@@ -84,7 +85,7 @@ class YtAccessor:
         if geometry is None:
             raise ValueError(
                 "Cannot determine yt geometry type, please provide"
-                "geometry = 'geographic', 'internal_geopgraphic' or 'cartesian'"
+                "geometry = 'geographic', 'internal_geographic' or 'cartesian'"
             )
 
         if "length_unit" in kwargs:
