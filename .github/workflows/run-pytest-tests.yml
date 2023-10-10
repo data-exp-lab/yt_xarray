@@ -26,7 +26,6 @@ jobs:
 
     # https://github.com/marketplace/actions/codecov#example-workflowyml-with-codecov-action
     - name: Upload coverage to Codecov
-      if: matrix.os == 'ubuntu-latest'
       uses: codecov/codecov-action@v3
       with:
         directory: ./coverage/
