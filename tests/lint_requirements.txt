@@ -1,4 +1,0 @@
-flake8==6.0.0 # keep in sync with .pre-commit-config.yaml
-isort==5.12.0   # keep in sync with .pre-commit-config.yaml
-black==22.8.0 # keep in sync with .pre-commit-config.yaml
-flake8-bugbear
