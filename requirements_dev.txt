@@ -1,12 +1,9 @@
 pip
-Sphinx==1.8.5
-jinja2<3.1.0
-twine==1.14.0
+twine
 pre-commit
 netCDF4
 h5py
 scipy
-pytest==6.2.4
+pytest
 pytest-cov
-nbsphinx
 dask[complete]
