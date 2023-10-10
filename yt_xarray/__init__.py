@@ -5,7 +5,7 @@ __email__ = "chris.havlin@gmail.com"
 __version__ = "0.1.4"
 
 
-# import the the xarray accessor so it is registered with xarray
+# import the xarray accessor so it is registered with xarray
 
 from .accessor import YtAccessor
 from .accessor._xr_to_yt import known_coord_aliases
