@@ -3,11 +3,12 @@ name: Run tests
 on: [pull_request]
 
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
+  test:
+    name: ${{ matrix.platform }} py${{ matrix.python-version }}
+    runs-on: ${{ matrix.platform }}
     strategy:
       matrix:
+        platform: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ['3.9', '3.10', '3.11']
 
     steps:
@@ -28,6 +29,7 @@ jobs:
 
     # https://github.com/marketplace/actions/codecov#example-workflowyml-with-codecov-action
     - name: Upload coverage to Codecov
+      if: matrix.os == 'ubuntu-latest'
       uses: codecov/codecov-action@v3
       with:
         directory: ./coverage/
