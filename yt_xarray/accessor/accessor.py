@@ -258,10 +258,11 @@ def _load_single_grid(
         return yt.load_uniform_grid(
             data,
             data_shp,
-            geometry=geom,
+            geometry=geom[0],
             bbox=bbox,
             length_unit=length_unit,
             cell_widths=sel_info.cell_widths,
+            axis_order=geom[1],
             **kwargs,
         )
     else:
@@ -272,9 +273,10 @@ def _load_single_grid(
         return yt.load_amr_grids(
             grid_data,
             data_shp,
-            geometry=geom,
+            geometry=geom[0],
             bbox=bbox,
             length_unit=length_unit,
+            axis_order=geom[1],
             **kwargs,
         )
 
@@ -443,8 +445,9 @@ def _load_chunked_grid(
     return yt.load_amr_grids(
         grid_data,
         data_shp,
-        geometry=geom,
+        geometry=geom[0],
         bbox=bbox,
         length_unit=length_unit,
+        axis_order=geom[1],
         **kwargs,
     )
