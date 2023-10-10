@@ -27,6 +27,10 @@ dependencies=['yt>=4.2.0', 'h5py>=3.4.0', 'pooch>=1.5.1', 'xarray']
 "Homepage" = "https://github.com/data-exp-lab/yt_xarray"
 "Bug Tracker" = "https://github.com/data-exp-lab/yt_xarray/issues"
 
+[project.optional-dependencies]
+full = ["netCDF4", "scipy", "dask[complete]"]
+test = ["pytest", "pytest-cov"]
+docs = ["Sphinx==1.8.5", "jinja2<3.1.0", "nbsphinx"]
 
 [tool.black]
 line-length = 88

@@ -1,9 +1,0 @@
-pip
-twine
-pre-commit
-netCDF4
-h5py
-scipy
-pytest
-pytest-cov
-dask[complete]
