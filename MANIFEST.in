@@ -6,6 +6,7 @@ include *.yaml
 include Makefile
 include tox.ini
 include .coveragerc
+include .flake8
 recursive-include tests *
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
