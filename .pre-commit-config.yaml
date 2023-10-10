@@ -1,6 +1,10 @@
 default_language_version:
     python: python3.10
 
+ci:
+    autofix_prs: false
+    autoupdate_schedule: weekly
+
 repos:
 -   repo: https://github.com/ambv/black
     rev: 22.8.0  # keep in sync with tests/lint_requirements.txt

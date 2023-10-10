@@ -2,7 +2,7 @@
 
 
 [![PyPI version](https://badge.fury.io/py/yt_xarray.svg)](https://badge.fury.io/py/yt_xarray)
-
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/data-exp-lab/yt_xarray/main.svg)](https://results.pre-commit.ci/latest/github/data-exp-lab/yt_xarray/main)
 
 An interface between yt and xarray
 
