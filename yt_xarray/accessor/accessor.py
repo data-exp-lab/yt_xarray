@@ -220,7 +220,6 @@ class YtAccessor:
 def _load_single_grid(
     ds_xr, sel_info, geom, use_callable, fields, length_unit, **kwargs
 ):
-
     geometry = geom[0]
 
     interp_required, data_shp, bbox = sel_info.interp_validation(geometry)
@@ -285,7 +284,6 @@ def _load_single_grid(
 def _load_chunked_grid(
     ds_xr, sel_info, geom, use_callable, fields, length_unit, chunksizes, **kwargs
 ):
-
     if isinstance(chunksizes, int):
         chunksizes = np.array((chunksizes,) * sel_info.ndims)
     elif len(chunksizes) != sel_info.ndims:
@@ -339,7 +337,6 @@ def _load_chunked_grid(
     subgrid_start = []
     subgrid_end = []
     for idim in range(sel_info.ndims):
-
         si_0 = si[idim] + chunksizes[idim] * np.arange(n_whl_chnk[idim])
         ei_0 = si_0 + chunksizes[idim]
 

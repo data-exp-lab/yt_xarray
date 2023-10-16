@@ -32,7 +32,6 @@ class Selection:
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
     ):
-
         self.fields = self._validate_fields(xr_ds, fields)
         self.units: dict = self._find_units(xr_ds)
         self.full_shape = xr_ds.data_vars[self.fields[0]].shape
@@ -60,7 +59,6 @@ class Selection:
         self.yt_coord_names = _convert_to_yt_internal_coords(self.selected_coords)
 
     def _find_units(self, xr_ds) -> dict:
-
         units = {}
         for field in self.fields:
             unit = getattr(xr_ds[field], "units", "")
@@ -70,7 +68,6 @@ class Selection:
         return units
 
     def _find_starting_index(self, coordname, coord_da, coord_select) -> int:
-
         si = 0
         selector = coord_select[coordname]
         if self.sel_dict_type == "isel":
@@ -116,7 +113,6 @@ class Selection:
         return si
 
     def _process_selection(self, xr_ds):
-
         # the full list of coordinates (in order)
         full_coords = list(xr_ds.data_vars[self.fields[0]].dims)
         time = 0.0
@@ -162,7 +158,6 @@ class Selection:
             is_time_dim = _check_for_time(c, coord_vals)
 
             if coord_vals.size > 1:
-
                 # not positive-monotonic? reverse it for cell width calculations
                 # changes to indexing are accounted for when extracting data.
                 if reverse_axis[-1]:
@@ -220,7 +215,6 @@ class Selection:
         }
 
     def _validate_fields(self, xr_ds, fields: List[str]) -> List[str]:
-
         if fields is None:
             raise ValueError("Please provide a list of fields")
 
@@ -232,7 +226,6 @@ class Selection:
             msg = "Provided fields must have the same "
 
             for f in fields[1:]:
-
                 if xr_ds.data_vars[f].shape != shape:
                     rmsg = msg + f"shape : {f} does not match {fields[0]}"
                     raise RuntimeError(rmsg)
@@ -400,7 +393,6 @@ def _add_3rd_axis_name(yt_geometry: str, axis_order: list) -> list:
 
 
 def _size_of_array_like(v):
-
     if isinstance(v, (np.ndarray, xr.DataArray)):
         return v.size
 

@@ -8,7 +8,6 @@ from yt_xarray.accessor import _xr_to_yt
 def _get_xarray_reader(
     handle, sel_info: _xr_to_yt.Selection, interp_required: Optional[bool] = True
 ):
-
     # the callable generator for an open xarray handle.
     # handle: an open xarray handle
     # sel_info: a Selection object for the handle

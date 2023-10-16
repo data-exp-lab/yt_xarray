@@ -31,7 +31,6 @@ def ds_xr():
 
 
 def test_accessor():
-
     tfield = "a_new_field"
     n_x = 3
     n_y = 4
@@ -82,7 +81,6 @@ def test_bbox():
 
 @pytest.mark.parametrize("use_callable", (True, False))
 def test_load_grid(ds_xr, use_callable):
-
     flds = ["a_new_field_0", "a_new_field_1"]
     ds_yt = ds_xr.yt.load_grid(flds, use_callable=use_callable)
     assert ds_yt.coordinates.name == "internal_geographic"

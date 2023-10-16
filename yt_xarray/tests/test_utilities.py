@@ -40,7 +40,6 @@ def test_float32_ds():
 
 
 def test_file_validation(tmp_path):
-
     tdir = tmp_path / "test_data"
     tdir.mkdir()
     b = tdir / "test_file.txt"
