@@ -5,7 +5,6 @@ from yt_xarray.sample_data import load_random_xr_data
 
 
 def test_load_random_xr_data():
-
     fields = {
         "field0": ("x", "y"),
         "field1": ("x", "y", "z"),
@@ -23,7 +22,6 @@ def test_load_random_xr_data():
 
 
 def test_load_random_xr_data_bad():
-
     fields = {"field0": ("x", "y")}
     dims = {"x": (0, 1, 4)}
 

@@ -10,7 +10,6 @@ from yt_xarray.utilities._utilities import construct_minimal_ds
 
 
 def test_partial_chunks_uni_cartesian():
-
     # uniform grid, cartesian
     fields = {
         "field0": ("x", "y", "z"),
@@ -29,7 +28,6 @@ def test_partial_chunks_uni_cartesian():
 
 
 def test_cartesian():
-
     # builds yt grids with and without chunking (and callables), compares the
     # frb ImageArrays for equivalent SlicePlots
     ds = construct_minimal_ds(x_name="x", y_name="y", z_name="z", n_fields=2)
@@ -49,7 +47,6 @@ def test_cartesian():
 
 
 def test_geographic_interp():
-
     # this case will require interpolation
     ds = construct_minimal_ds(n_fields=2)
     ds_yt_nochunk = ds.yt.load_grid()
@@ -66,7 +63,6 @@ def test_geographic_interp():
 
 
 def test_geographic_no_interp():
-
     # this case will not require interpolation
     ds = construct_minimal_ds(
         n_fields=2, min_x=30.0, max_x=35.0, min_y=40.0, max_y=42.0
@@ -106,7 +102,6 @@ def test_chunks_stretched_not_implemented():
 
 
 def test_dask_array():
-
     # checks that we can handle a field that is a dask array
     shp = (10, 12, 5)
     f1 = da.random.random(shp, chunks=5)

@@ -35,9 +35,7 @@ c_m_ds_kwargs = {"latitude": "y_name", "longitude": "x_name", "altitude": "z_nam
 
 @pytest.mark.parametrize("coord", ("latitude", "longitude", "altitude"))
 def test_selection_aliases(coord):
-
     for othername in xr2yt._coord_aliases[coord]:
-
         kwargs = {c_m_ds_kwargs[coord]: othername}
         ds = construct_minimal_ds(**kwargs)
         fields = list(ds.data_vars)
@@ -74,7 +72,6 @@ def _isel_tester(ds_xr, sel, fields, coord, start_index):
 
 @pytest.mark.parametrize("coord", ("latitude", "longitude", "depth"))
 def test_selection_isel(ds_xr, coord):
-
     fields = list(ds_xr.data_vars)
 
     sel_dict = {coord: slice(1, len(ds_xr.coords[coord]))}
@@ -129,7 +126,6 @@ def test_selection_units():
 
 
 def test_selection_errors(ds_xr):
-
     coord = "latitude"
     sel_dict = {coord: slice(1, len(ds_xr.coords[coord]))}
     sel_dict_type = "isel"
@@ -352,7 +348,6 @@ _expected_geoms = {
     "geometry", ["cartesian", "spherical", "geographic", "internal_geographic"]
 )
 def test_finding_3rd_dim(geometry):
-
     expected = _expected_geoms[geometry]
     # select any 2, make sure we add the 3rd back. repeat for every permutation
     choices = list(expected)
@@ -432,7 +427,6 @@ def test_time_check(dim_name, dim_vals, expected):
     ],
 )
 def test_selection_interp_validation(geometry, stretched, interp_required):
-
     if geometry == "cartesian":
         dim_names = ("x", "y", "z")
     elif geometry == "geographic":
@@ -467,7 +461,6 @@ def test_selection_interp_validation(geometry, stretched, interp_required):
     "yt_geom", ("cartesian", "spherical", "geographic", "internal_geographic")
 )
 def test_add_3rd_axis_name(yt_geom):
-
     # get full list, remove on and make sure we get it back
     expected = list(xr2yt._expected_yt_axes[yt_geom])
     actual = xr2yt._add_3rd_axis_name(yt_geom, expected[:-1])

@@ -34,7 +34,6 @@ def load_random_xr_data(
 
     data = {}
     for field, field_dims in fields.items():
-
         coords = {}
         sz = []
         for dim_name in field_dims:

@@ -31,7 +31,6 @@ def construct_minimal_ds(
     dtype: str = "float64",
     npseed: bool = False,
 ) -> xr.Dataset:
-
     if coord_order is None:
         coord_order = ("z", "y", "x")
 
@@ -113,7 +112,6 @@ def _test_time_coord(nt=5):
 def _get_test_coord(
     cname, n, minv: Optional[float] = None, maxv: Optional[float] = None
 ):
-
     if cname in known_coord_aliases:
         cname = known_coord_aliases[cname]
 
@@ -143,7 +141,6 @@ def _get_test_coord(
 
 
 def construct_ds_with_extra_dim(icoord: int, dim_name: str = "time"):
-
     coord_configs = {
         0: (dim_name, "x", "y", "z"),
         1: (dim_name, "z", "y", "x"),
