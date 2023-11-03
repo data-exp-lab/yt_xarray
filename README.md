@@ -2,6 +2,7 @@
 
 [![PyPI version](https://badge.fury.io/py/yt_xarray.svg)](https://badge.fury.io/py/yt_xarray)
 [![Python Version](https://img.shields.io/pypi/pyversions/yt_xarray.svg?color=green)](https://python.org)
+[![Tests](https://github.com/data-exp-lab/yt_xarray/actions/workflows/run-pytest-tests.yml/badge.svg)](https://github.com/data-exp-lab/yt_xarray/actions/workflows/run-pytest-tests.yml)
 [![codecov](https://codecov.io/gh/data-exp-lab/yt_xarray/branch/main/graph/badge.svg)](https://codecov.io/gh/data-exp-lab/yt_xarray)
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/data-exp-lab/yt_xarray/main.svg)](https://results.pre-commit.ci/latest/github/data-exp-lab/yt_xarray/main)
 

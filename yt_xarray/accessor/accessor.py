@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy as np
 import xarray as xr
@@ -22,7 +22,7 @@ class YtAccessor:
 
     def load_grid(
         self,
-        fields: Optional[List[str]] = None,
+        fields: Optional[Union[str, List[str]]] = None,
         geometry: str = None,
         use_callable: bool = True,
         sel_dict: Optional[dict] = None,
@@ -35,7 +35,7 @@ class YtAccessor:
 
         Parameters
         ----------
-        fields : list[str]
+        fields : str, list[str]
             list of fields to include. If None, will try to use all fields
 
         geometry : str
@@ -65,6 +65,11 @@ class YtAccessor:
         if fields is None:
             # might as well try!
             fields = list(self._obj.data_vars)
+
+        if isinstance(fields, str):
+            fields = [
+                fields,
+            ]
 
         sel_info = _xr_to_yt.Selection(
             self._obj,
