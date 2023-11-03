@@ -222,6 +222,7 @@ def test_stretched_grid(use_callable):
         dimvals = np.unique(ad[("index", dim)].d)
         assert np.all(dimvals == cell_centers)
 
+
 def test_load_single_field(ds_xr):
     flds = "a_new_field_0"
     ds_yt = ds_xr.yt.load_grid(flds)
