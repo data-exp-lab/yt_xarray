@@ -72,12 +72,6 @@ class YtAccessor:
             sel_dict=sel_dict,
             sel_dict_type=sel_dict_type,
         )
-        if sel_info.grid_type == _xr_to_yt._GridType.STRETCHED and use_callable:
-            # why not? this should work now, shouldnt it?
-            raise NotImplementedError(
-                "Detected a stretched grid, which is not yet supported for callables, "
-                "set use_callable=False."
-            )
 
         if geometry is None:
             geometry = self.geometry

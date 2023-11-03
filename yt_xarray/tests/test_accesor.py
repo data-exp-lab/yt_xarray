@@ -189,7 +189,8 @@ def test_geom_kwarg(ds_xr):
     _ = ds_xr.yt.load_grid(fields=flds, geometry="cartesian")
 
 
-def test_stretched_grid():
+@pytest.mark.parametrize("use_callable", [True, False])
+def test_stretched_grid(use_callable):
     ds = construct_minimal_ds(
         x_stretched=False,
         x_name="x",
@@ -199,16 +200,24 @@ def test_stretched_grid():
         z_name="z",
     )
 
-    with pytest.raises(NotImplementedError, match="Detected a stretched grid"):
-        _ = ds.yt.load_grid(
-            fields=[
-                "test_field",
-            ]
-        )
-
-    _ = ds.yt.load_grid(
+    ds_yt = ds.yt.load_grid(
         fields=[
             "test_field",
         ],
-        use_callable=False,
+        use_callable=use_callable,
     )
+
+    # stretched grid will interpolate using raw values as nodal values, so
+    # end up with n - 1 cells in each dimension
+    expected_n = np.prod([n - 1 for n in ds.test_field.shape])
+    ad = ds_yt.all_data()
+
+    tst_fld = ad[("stream", "test_field")]
+    assert tst_fld.size == expected_n
+
+    # check that the grid vals match
+    for dim in "xyz":
+        dims = ds.coords[dim].values
+        cell_centers = (dims[:-1] + dims[1:]) / 2
+        dimvals = np.unique(ad[("index", dim)].d)
+        assert np.all(dimvals == cell_centers)
