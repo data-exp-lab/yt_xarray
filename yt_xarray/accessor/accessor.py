@@ -9,6 +9,7 @@ from unyt import unyt_quantity
 from yt_xarray.accessor import _xr_to_yt
 from yt_xarray.accessor._readers import _get_xarray_reader
 from yt_xarray.accessor._xr_to_yt import _load_full_field_from_xr
+from yt_xarray.accessor._yt_wrappers import YTVisContainer
 from yt_xarray.utilities.logging import ytxr_log
 
 
@@ -19,6 +20,9 @@ class YtAccessor:
         self._bbox_cart = {}
         self._bbox = {}
         self._field_grids = defaultdict(lambda: None)
+
+        # organize all the visualization methods to hang off of ds.yt.vis
+        self.vis = YTVisContainer(xarray_obj)
 
     def load_grid(
         self,
