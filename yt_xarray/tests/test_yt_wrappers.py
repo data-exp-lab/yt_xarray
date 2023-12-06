@@ -8,7 +8,11 @@ from yt_xarray.sample_data import load_random_xr_data
 
 @pytest.fixture
 def xr_ds():
-    fields = {"temperature": ("x", "y", "z"), "pressure": ("x", "y", "z")}
+    fields = {
+        "temperature": ("x", "y", "z"),
+        "pressure": ("x", "y", "z"),
+        "precip": ("x", "y", "z"),
+    }
     dims = {"x": (0, 1, 15), "y": (0, 1, 10), "z": (0, 1, 15)}
     ds = load_random_xr_data(fields, dims, length_unit="m")
     return ds
@@ -41,9 +45,7 @@ def test_phase_plot(tmp_path, xr_ds):
 
 
 def test_profile_plot(tmp_path, xr_ds):
-    slc = xr_ds.yt.vis.ProfilePlot(
-        "pressure", "temperature", weight_field="temperature"
-    )
+    slc = xr_ds.yt.vis.ProfilePlot("pressure", "temperature", weight_field="precip")
 
     output_dir = tmp_path / "output"
     output_dir.mkdir()
