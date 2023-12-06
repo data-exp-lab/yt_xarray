@@ -82,3 +82,38 @@ class YTVisContainer:
             figure_size=figure_size,
             shading=shading,
         )
+
+    def ProfilePlot(
+        self,
+        x_field,
+        y_fields,
+        weight_field=None,
+        n_bins=64,
+        accumulation=False,
+        fractional=False,
+        label=None,
+        plot_spec=None,
+        x_log=True,
+        y_log=True,
+    ):
+        fields_needed = list(set([x_field, y_fields]))
+
+        if weight_field is not None and weight_field not in fields_needed:
+            fields_needed.append(weight_field)
+
+        ds = _get_default_ds(self._obj, fields_needed)
+        ad = ds.all_data()
+
+        return yt.ProfilePlot(
+            ad,
+            x_field,
+            y_fields,
+            weight_field=weight_field,
+            n_bins=n_bins,
+            accumulation=accumulation,
+            fractional=fractional,
+            label=label,
+            plot_spec=plot_spec,
+            x_log=x_log,
+            y_log=y_log,
+        )

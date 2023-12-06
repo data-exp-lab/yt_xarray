@@ -38,3 +38,17 @@ def test_phase_plot(tmp_path, xr_ds):
     slc.save(fname)
 
     assert os.path.isfile(fname)
+
+
+def test_profile_plot(tmp_path, xr_ds):
+    slc = xr_ds.yt.vis.ProfilePlot(
+        "pressure", "temperature", weight_field="temperature"
+    )
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    fname = str(output_dir / "yt_xarray_ProfilePlot.png")
+    actual_name = slc.save(fname)[0]
+
+    assert os.path.isfile(actual_name)
