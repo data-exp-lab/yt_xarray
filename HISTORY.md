@@ -1,5 +1,10 @@
 # History
 
+## 0.3.0
+
+### New Features
+* yt wrapper methods
+
 ## 0.2.0 (2023-10-10)
 
 Maintenance release. Minimum python version is now 3.9.
