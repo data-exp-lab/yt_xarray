@@ -215,6 +215,216 @@ class YtAccessor:
         )
         return sel_info.selected_bbox
 
+    def SlicePlot(self, normal, field, **im_kwargs):
+        """
+        Wrapper of `yt.SlicePlot`. For off-axis plots, first construct a
+        yt dataset object with `ds.yt.load_grid` and then use `yt.SlicePlot`
+
+        Parameters
+        ----------
+        normal: str or int
+            The normal to the slice.
+        field: str
+            The field to plot
+        **im_kwargs
+            any of the keyword arguments accepted by yt.SlicePlot
+
+        Returns
+        -------
+        yt PlotWindow
+        """
+        return _yt_2D_plot(yt.SlicePlot, self._obj, normal, field, **im_kwargs)
+
+    def ProjectionPlot(self, normal, field, **im_kwargs):
+        """
+        Wrapper of `yt.ProjectionPlot`. For off-axis plots, first construct a
+        yt dataset object with `ds.yt.load_grid` and then use `yt.ProjectionPlot`
+
+        Parameters
+        ----------
+        normal: str or int or 3-element tuple
+            The normal to the slice.
+        field: str
+            The field to plot
+        **im_kwargs
+            any of the keyword arguments accepted by yt.ProjectionPlot
+
+        Returns
+        -------
+        yt PlotWindow
+        """
+        return _yt_2D_plot(yt.ProjectionPlot, self._obj, normal, field, **im_kwargs)
+
+    def PhasePlot(
+        self,
+        x_field: str,
+        y_field: str,
+        z_fields: Union[str, List[str]],
+        weight_field: Optional[str] = None,
+        x_bins: Optional[int] = 128,
+        y_bins: Optional[int] = 128,
+        accumulation: Optional[bool] = False,
+        fractional: Optional[bool] = False,
+        fontsize: Optional[int] = 18,
+        figure_size: Optional[int] = 8.0,
+        shading: Optional[str] = "nearest",
+    ):
+        """
+        Construct a `yt.PhasePlot`.
+
+        Parameters
+        ----------
+        x_field : str
+            The x binning field for the profile.
+        y_field : str
+            The y binning field for the profile.
+        z_fields : str or list
+            The field or fields to be profiled.
+        weight_field : str
+            The weight field for calculating weighted averages.  If None,
+            the profile values are the sum of the field values within the bin.
+            Otherwise, the values are a weighted average.
+            Default : ("gas", "mass")
+        x_bins : int
+            The number of bins in x field for the profile.
+            Default: 128.
+        y_bins : int
+            The number of bins in y field for the profile.
+            Default: 128.
+        accumulation : bool or list of bools
+            If True, the profile values for a bin n are the cumulative sum of
+            all the values from bin 0 to n.  If -True, the sum is reversed so
+            that the value for bin n is the cumulative sum from bin N (total bins)
+            to n.  A list of values can be given to control the summation in each
+            dimension independently.
+            Default: False.
+        fractional : If True the profile values are divided by the sum of all
+            the profile data such that the profile represents a probability
+            distribution function.
+        fontsize : int
+            Font size for all text in the plot.
+            Default: 18.
+        figure_size : int
+            Size in inches of the image.
+            Default: 8 (8x8)
+        shading : str
+            This argument is directly passed down to matplotlib.axes.Axes.pcolormesh
+            see
+            https://matplotlib.org/3.3.1/gallery/images_contours_and_fields/pcolormesh_grids.html#sphx-glr-gallery-images-contours-and-fields-pcolormesh-grids-py  # noqa
+            Default: 'nearest'
+
+        """
+        if isinstance(z_fields, str):
+            z_fields = [
+                z_fields,
+            ]
+
+        fields_needed = list(set([x_field, y_field] + z_fields))
+        ds = _get_default_ds(self._obj, fields_needed)
+
+        x_field = ("stream", x_field)
+        y_field = ("stream", y_field)
+        z_fields = [("stream", z_f) for z_f in z_fields]
+
+        return yt.PhasePlot(
+            ds,
+            x_field,
+            y_field,
+            z_fields,
+            weight_field=weight_field,
+            x_bins=x_bins,
+            y_bins=y_bins,
+            accumulation=accumulation,
+            fractional=fractional,
+            fontsize=fontsize,
+            figure_size=figure_size,
+            shading=shading,
+        )
+
+    def ProfilePlot(
+        self,
+        x_field,
+        y_fields,
+        weight_field=None,
+        n_bins=64,
+        accumulation=False,
+        fractional=False,
+        label=None,
+        plot_spec=None,
+        x_log=True,
+        y_log=True,
+    ):
+        """
+        Construct a `yt.ProfilePlot`.
+
+        Parameters
+        ----------
+        x_field : str
+            The binning field for the profile.
+        y_fields : str or list
+            The field or fields to be profiled.
+        weight_field : str
+            The weight field for calculating weighted averages. If None,
+            the profile values are the sum of the field values within the bin.
+            Otherwise, the values are a weighted average.
+            Default : None
+        n_bins : int
+            The number of bins in the profile.
+            Default: 64.
+        accumulation : bool
+            If True, the profile values for a bin N are the cumulative sum of
+            all the values from bin 0 to N.
+            Default: False.
+        fractional : If True the profile values are divided by the sum of all
+            the profile data such that the profile represents a probability
+            distribution function.
+        label : str or list of strings
+            If a string, the label to be put on the line plotted.  If a list,
+            this should be a list of labels for each profile to be overplotted.
+            Default: None.
+        plot_spec : dict or list of dicts
+            A dictionary or list of dictionaries containing plot keyword
+            arguments.  For example, dict(color="red", linestyle=":").
+            Default: None.
+        x_log : bool
+            Whether the x_axis should be plotted with a logarithmic
+            scaling (True), or linear scaling (False).
+            Default: True.
+        y_log : dict or bool
+            A dictionary containing field:boolean pairs, setting the logarithmic
+            property for that field. May be overridden after instantiation using
+            set_log
+            A single boolean can be passed to signify all fields should use
+            logarithmic (True) or linear scaling (False).
+            Default: True.
+
+
+        Returns
+        -------
+
+        """
+        fields_needed = list(set([x_field, y_fields]))
+
+        if weight_field is not None and weight_field not in fields_needed:
+            fields_needed.append(weight_field)
+
+        ds = _get_default_ds(self._obj, fields_needed)
+        ad = ds.all_data()
+
+        return yt.ProfilePlot(
+            ad,
+            x_field,
+            y_fields,
+            weight_field=weight_field,
+            n_bins=n_bins,
+            accumulation=accumulation,
+            fractional=fractional,
+            label=label,
+            plot_spec=plot_spec,
+            x_log=x_log,
+            y_log=y_log,
+        )
+
 
 def _load_single_grid(
     ds_xr, sel_info, geom, use_callable, fields, length_unit, **kwargs
@@ -448,3 +658,23 @@ def _load_chunked_grid(
         axis_order=geom[1],
         **kwargs,
     )
+
+
+def _get_default_ds(ds_xr: xr.Dataset, field):
+    geom = ds_xr.yt.geometry  # will trigger inference here
+
+    # other load_grid options
+    # use_callable: bool = True,
+    # sel_dict: Optional[dict] = None,  dont need this one
+    # sel_dict_type: Optional[str] = "isel",  dont need this one
+    # chunksizes: Optional[int] = None,
+
+    # if the grid were cached this might be easier...
+    ds = ds_xr.yt.load_grid(fields=field, geometry=geom)
+    return ds
+
+
+def _yt_2D_plot(yt_function, ds_xr: xr.Dataset, normal, field, **im_kwargs):
+    ds = _get_default_ds(ds_xr, field)
+    # normal = validate_normal(normal)
+    return yt_function(ds, normal, ("stream", field), **im_kwargs)
