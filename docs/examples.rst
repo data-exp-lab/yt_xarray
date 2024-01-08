@@ -9,6 +9,7 @@ Example Notebooks
     examples/example_003_two_dimensional_fields
     examples/example_004_xr_yt_cartopy
     examples/example_005_chunked_data
+    examples/example_006_yt_method_access
 
 These notebooks demonstrate `yt_xarray` usage:
 
@@ -17,3 +18,4 @@ These notebooks demonstrate `yt_xarray` usage:
 - Example 003: :doc:`examples/example_003_two_dimensional_fields`
 - Example 004: :doc:`examples/example_004_xr_yt_cartopy`
 - Example 005: :doc:`examples/example_005_chunked_data`
+- Example 006: :doc:`examples/example_006_yt_method_access`
