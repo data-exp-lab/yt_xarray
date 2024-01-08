@@ -6,8 +6,7 @@ import pytest
 from yt_xarray.sample_data import load_random_xr_data
 
 
-@pytest.fixture(scope="function")
-def xr_ds():
+def get_xr_ds():
     fields = {
         "temperature": ("x", "y", "z"),
         "pressure": ("x", "y", "z"),
@@ -19,7 +18,8 @@ def xr_ds():
 
 
 @pytest.mark.parametrize("viz_method", ["SlicePlot", "ProjectionPlot"])
-def test_2d_volume_plots(tmp_path, xr_ds, viz_method):
+def test_2d_volume_plots(tmp_path, viz_method):
+    xr_ds = get_xr_ds()
     func = getattr(xr_ds.yt, viz_method)
     slc = func("x", "temperature")
 
@@ -32,7 +32,8 @@ def test_2d_volume_plots(tmp_path, xr_ds, viz_method):
     assert os.path.isfile(fname)
 
 
-def test_phase_plot(tmp_path, xr_ds):
+def test_phase_plot(tmp_path):
+    xr_ds = get_xr_ds()
     slc = xr_ds.yt.PhasePlot("pressure", "temperature", "temperature")
 
     output_dir = tmp_path / "output"
@@ -44,7 +45,8 @@ def test_phase_plot(tmp_path, xr_ds):
     assert os.path.isfile(fname)
 
 
-def test_profile_plot(tmp_path, xr_ds):
+def test_profile_plot(tmp_path):
+    xr_ds = get_xr_ds()
     slc = xr_ds.yt.ProfilePlot("pressure", "temperature", weight_field="precip")
 
     output_dir = tmp_path / "output"
