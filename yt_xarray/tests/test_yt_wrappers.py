@@ -6,7 +6,7 @@ import pytest
 from yt_xarray.sample_data import load_random_xr_data
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def xr_ds():
     fields = {
         "temperature": ("x", "y", "z"),
