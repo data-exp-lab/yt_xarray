@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from yt_xarray import transformations
 from yt_xarray.sample_data import load_random_xr_data
@@ -52,3 +53,16 @@ def test_geocentric_embedded():
     assert np.isfinite(mx)
     assert mn > 0
     assert mx > mn
+
+
+def test_bad_coord_names():
+    scale = {"whatever": 2.0, "x": 0.5}
+    n_c = ("x", "y", "whatever")
+    lsc = transformations.LinearScale(n_c, scale=scale)
+    with pytest.raises(RuntimeError, match="bad_name is not a valid coordinate name"):
+        _ = lsc.to_transformed(x=1.0, y=1.0, bad_name=1.0)
+
+    x, y, whatever = lsc.to_transformed(x=1.0, y=1.0, whatever=1.0)
+    assert (x, y, whatever) == (0.5, 1.0, 2.0)
+    with pytest.raises(RuntimeError, match="bad_name is not a valid coordinate name"):
+        _ = lsc.to_native(x_sc=x, y_sc=y, bad_name=whatever)

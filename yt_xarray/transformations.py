@@ -16,23 +16,31 @@ class Transformer(abc.ABC):
 
     @abc.abstractmethod
     def calculate_native(self, **coords):
-        pass
+        """function to convert from transformed to native coordinates"""
 
     @abc.abstractmethod
     def calculate_transformed(self, **coords):
-        pass
+        """function to convert from native to transformed coordinates"""
 
     def to_native(self, **coords):
         for dim in coords.keys():
             if dim not in self.transformed_coords:
-                raise RuntimeError()
+                msg = (
+                    f"{dim} is not a valid coordinate name. "
+                    f"Expected one of {self.transformed_coords}."
+                )
+                raise RuntimeError(msg)
 
         return self.calculate_native(**coords)
 
     def to_transformed(self, **coords):
         for dim in coords.keys():
             if dim not in self.native_coords:
-                raise RuntimeError()
+                msg = (
+                    f"{dim} is not a valid coordinate name. "
+                    f"Expected one of {self.native_coords}."
+                )
+                raise RuntimeError(msg)
 
         return self.calculate_transformed(**coords)
 
