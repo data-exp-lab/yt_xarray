@@ -227,3 +227,9 @@ def test_load_single_field(ds_xr):
     flds = "a_new_field_0"
     ds_yt = ds_xr.yt.load_grid(flds)
     _ = ds_yt.all_data()[("stream", flds)]
+
+
+def test_last_yt_cache(ds_xr):
+    flds = "a_new_field_0"
+    _ = ds_xr.yt.load_grid(flds)
+    assert ds_xr.yt._yt_ds is not None
