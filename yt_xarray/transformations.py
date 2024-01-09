@@ -6,6 +6,8 @@ import xarray as xr
 import yt
 from unyt import earth_radius as _earth_radius
 
+from yt_xarray.utilities._utilities import _import_optional_dep
+
 EARTH_RADIUS = _earth_radius * 1.0
 
 
@@ -83,14 +85,12 @@ class GeocentricCartesian(Transformer):
         radial_axis: Optional[str] = None,
         r_o=None,
     ):
-        try:
-            import aglio  # NOQA
-        except ImportError:
-            msg = (
-                "This operation requires the aglio package. Install "
-                "with `pip install aglio` and try again."
-            )
-            raise ImportError(msg)
+        # catch missing dependencies early
+        emsg = (
+            "This functionality requires the aglio package, "
+            "install it with `pip install aglio`"
+        )
+        _ = _import_optional_dep("aglio", custom_message=emsg)
 
         transformed_cords = ("x", "y", "z")
 
@@ -115,7 +115,7 @@ class GeocentricCartesian(Transformer):
         super().__init__(native_coords, transformed_cords)
 
     def calculate_transformed(self, **coords):
-        from aglio.coordinate_transformations import geosphere2cart
+        ct = _import_optional_dep("aglio.coordinate_transformations")
 
         if self.radial_type == "depth":
             r_val = self._r_o - coords[self.radial_axis]
@@ -124,13 +124,13 @@ class GeocentricCartesian(Transformer):
         else:
             r_val = coords[self.radial_axis]
 
-        x, y, z = geosphere2cart(coords["latitude"], coords["longitude"], r_val)
+        x, y, z = ct.geosphere2cart(coords["latitude"], coords["longitude"], r_val)
         return x, y, z
 
     def calculate_native(self, **coords):
-        from aglio.coordinate_transformations import cart2sphere
+        ct = _import_optional_dep("aglio.coordinate_transformations")
 
-        R, lat, lon = cart2sphere(
+        R, lat, lon = ct.cart2sphere(
             coords["x"], coords["y"], coords["z"], geo=True, deg=True
         )
 
