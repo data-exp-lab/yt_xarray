@@ -683,7 +683,6 @@ def _get_default_ds(ds_xr: xr.Dataset, field):
 
     # if the grid were cached this might be easier...
     ds = ds_xr.yt.load_grid(fields=field, geometry=geom)
-    ds_xr.yt._yt_ds = ds
     return ds
 
 
