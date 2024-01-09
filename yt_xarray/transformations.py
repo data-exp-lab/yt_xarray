@@ -71,11 +71,16 @@ class LinearScale(Transformer):
         return native
 
 
+_default_radial_axes = dict(
+    zip(("radius", "depth", "altitude"), ("radius", "depth", "altitude"))
+)
+
+
 class GeocentricCartesian(Transformer):
     def __init__(
         self,
-        radial_axis: str = "radius",
         radial_type: str = "radius",
+        radial_axis: Optional[str] = None,
         r_o=None,
     ):
         try:
@@ -87,16 +92,25 @@ class GeocentricCartesian(Transformer):
             )
             raise ImportError(msg)
 
-        native_coords = (radial_axis, "latitude", "longitude")
         transformed_cords = ("x", "y", "z")
+
+        valid_radial_types = ("radius", "depth", "altitude")
+        if radial_type not in valid_radial_types:
+            msg = (
+                f"radial_type must be one of {valid_radial_types}, "
+                f"found {radial_type}."
+            )
+            raise ValueError(msg)
         self.radial_type = radial_type
-        if radial_type not in ("radius", "depth", "altitude"):
-            raise ValueError()
 
         if r_o is None:
-            self._r_o = EARTH_RADIUS
+            r_o = EARTH_RADIUS.to("m").d
+        self._r_o = r_o
 
+        if radial_axis is None:
+            radial_axis = _default_radial_axes[radial_type]
         self.radial_axis = radial_axis
+        native_coords = (radial_axis, "latitude", "longitude")
 
         super().__init__(native_coords, transformed_cords)
 

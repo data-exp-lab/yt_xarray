@@ -14,6 +14,10 @@ def test_linear():
     round_trip = lsc.to_native(x_sc=x, y_sc=y, whatever_sc=whatever)
     assert tuple(round_trip) == (1.0, 1.0, 1.0)
 
+    lsc = transformations.LinearScale(n_c)
+    for ky in n_c:
+        assert lsc.scale[ky] == 1.0
+
 
 def test_geocentric():
     gc = transformations.GeocentricCartesian(r_o=6371.0)
@@ -28,6 +32,21 @@ def test_geocentric():
     in_ = np.asarray((r_in, lat_in, lon_in))
 
     assert np.allclose(out_, in_)
+
+    with pytest.raises(ValueError, match="radial_type must be one of"):
+        _ = transformations.GeocentricCartesian(r_o=6371.0, radial_type="bad_type")
+
+    gc = transformations.GeocentricCartesian(r_o=6000.0, radial_type="depth")
+    depth_in = 300.0
+    x, y, z = gc.to_transformed(depth=depth_in, latitude=lat_in, longitude=lon_in)
+    depth_out, lat_out, lon_out = gc.to_native(x=x, y=y, z=z)
+    assert np.allclose(depth_out, depth_in)
+
+    gc = transformations.GeocentricCartesian(radial_type="altitude")
+    altitude_in = 300.0
+    x, y, z = gc.to_transformed(altitude=altitude_in, latitude=lat_in, longitude=lon_in)
+    altitude_out, lat_out, lon_out = gc.to_native(x=x, y=y, z=z)
+    assert np.allclose(altitude_out, altitude_in)
 
 
 def test_geocentric_embedded():
