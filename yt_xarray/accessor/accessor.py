@@ -19,6 +19,16 @@ class YtAccessor:
         self._bbox_cart = {}
         self._bbox = {}
         self._field_grids = defaultdict(lambda: None)
+        self._active_yt_ds = None
+
+    @property
+    def _yt_ds(self):
+        # a property for storing the last-loaded yt dataset.
+        return self._active_yt_ds
+
+    @_yt_ds.setter
+    def _yt_ds(self, yt_ds):
+        self._active_yt_ds = yt_ds
 
     def load_grid(
         self,
@@ -111,7 +121,7 @@ class YtAccessor:
         kwargs.update({"sim_time": simtime})
 
         if chunksizes is None:
-            return _load_single_grid(
+            ds_yt = _load_single_grid(
                 self._obj, sel_info, geom, use_callable, fields, length_unit, **kwargs
             )
         elif sel_info.grid_type == _xr_to_yt._GridType.STRETCHED:
@@ -119,7 +129,7 @@ class YtAccessor:
                 "Stretched grids cannot set the chunksizes argument."
             )
         else:
-            return _load_chunked_grid(
+            ds_yt = _load_chunked_grid(
                 self._obj,
                 sel_info,
                 geom,
@@ -129,6 +139,8 @@ class YtAccessor:
                 chunksizes,
                 **kwargs,
             )
+        self._yt_ds = ds_yt
+        return ds_yt
 
     def _infer_length_unit(self):
         if self.geometry == "geodetic":
@@ -671,6 +683,7 @@ def _get_default_ds(ds_xr: xr.Dataset, field):
 
     # if the grid were cached this might be easier...
     ds = ds_xr.yt.load_grid(fields=field, geometry=geom)
+    ds_xr.yt._yt_ds = ds
     return ds
 
 
