@@ -303,16 +303,91 @@ class GeocentricCartesian(Transformer):
 def build_interpolated_cartesian_ds(
     xr_ds: xr.Dataset,
     fields: Tuple[str],
+    radial_type: str,
     bbox_dict: Optional[dict] = None,
     grid_resolution: Optional[List[int]] = None,
+    radial_axis: Optional[str] = None,
+    r_o: Optional[float] = None,
+    fill_value: Optional[float] = None,
+    length_unit: Optional[str] = "km",
 ):
-    dims = xr_ds.data_vars[fields[0]].dims
-    assert "latitude" in dims
-    assert "longitude" in dims
-    assert "radius" in dims
-    coords = ("radius", "latitude", "longitude")
+    """
+    Build a yt cartesian dataset containing fields interpolated on demand
+    from data defined on a 3D Geodetic grid to a uniform, cartesian grid
 
-    gc = GeocentricCartesian()
+    Parameters
+    ----------
+    xr_ds: xr.Dataset
+        the xarray dataset
+    fields: tuple
+        the fields to include
+    radial_type: str
+        one of 'radius', 'depth', 'altitude' to indicate type of radial axis.
+    bbox_dict: dict
+        optional bounding box to limit the data by
+    grid_resolution:
+        the interpolated grid resolution, defaults to (64, 64, 64)
+    radial_axis: str
+        the name of the radial axis, will try to infer if not provided
+    r_o: float
+        the reference radius, defaults to the radius of the Earth
+    fill_value: float
+        Optional value to use for filling grid values that fall outside
+        the original data. Defaults to np.nan, but for volume rendering
+        you may want to adjust this.
+    length_unit: str
+        the length unit to use, defaults to 'km'
+
+    Returns
+    -------
+    yt.Dataset
+        a yt dataset: cartesian, uniform grid with references to the
+        provided xarray dataset. Interpolation from geodetic to geocentric
+        cartesian happens on demand on data reads.
+
+    """
+
+    if fill_value is None:
+        fill_value = np.nan
+
+    dims = xr_ds.data_vars[fields[0]].dims
+
+    # lat/lon disambiguation should happen here
+    if "latitude" not in dims:
+        msg = f"expected latitude as one dimensions, found {dims}"
+        raise ValueError(msg)
+    if "longitude" not in dims:
+        msg = f"expected longitude as one dimensions, found {dims}"
+        raise ValueError(msg)
+
+    latname = "latitude"
+    lonname = "longitude"
+
+    if radial_axis is not None:
+        if radial_axis not in dims:
+            msg = (
+                f"The supplied radial_axis, {radial_axis} is one of the "
+                f"dimensions: {dims}"
+            )
+            raise ValueError(msg)
+    else:
+        # try to infer it
+        for dim in dims:
+            if dim not in (latname, lonname):
+                radial_axis = dim
+        if radial_axis is None:
+            msg = (
+                f"could not determine radial axis from {dims}, please specify"
+                "with the radial_axis keyword argument."
+            )
+            raise RuntimeError(msg)
+
+    coords = (radial_axis, latname, lonname)
+
+    if r_o is None:
+        r_o = EARTH_RADIUS.to(length_unit).d
+
+    gc = GeocentricCartesian(radial_type=radial_type, radial_axis=radial_axis, r_o=r_o)
 
     if bbox_dict is None:
         bbox_dict = {}
@@ -322,19 +397,22 @@ def build_interpolated_cartesian_ds(
                 np.max(xr_ds.coords[coord].values),
             ]
 
-    # get 3d cartesian bounding box
+    # get 3d cartesian bounding box, be sure to use all 8 corners of the
+    # native coordinate bounding box.
     rads = [
-        bbox_dict["radius"][0],
-    ] * 4 + [bbox_dict["radius"][1]] * 4
-    la = "latitude"
-    lo = "longitude"
+        bbox_dict[radial_axis][0],
+    ] * 4 + [bbox_dict[radial_axis][1]] * 4
+    la = latname
+    lo = lonname
     lats = [bbox_dict[la][0], bbox_dict[la][0], bbox_dict[la][1], bbox_dict[la][1]] * 2
     lons = [bbox_dict[lo][0], bbox_dict[lo][1], bbox_dict[lo][1], bbox_dict[lo][0]] * 2
 
     rads = np.array(rads)
     lats = np.array(lats)
     lons = np.array(lons)
-    x_y_z = gc.to_transformed(radius=rads, latitude=lats, longitude=lons)
+    has_neg_lons = any(lons < 0)
+    cs_to_transform = {radial_axis: rads, latname: lats, lonname: lons}
+    x_y_z = gc.to_transformed(**cs_to_transform)
 
     bbox_cart = []
     for idim in range(3):
@@ -353,22 +431,26 @@ def build_interpolated_cartesian_ds(
             )
 
         r, lat, lon = gc.to_native(x=xyz[0], y=xyz[1], z=xyz[2])
+        if has_neg_lons:
+            # the native data uses -180, 180, lat above will be 0, 360
+            lon_mask = lon > 180.0
+            lon[lon_mask] = lon[lon_mask] - 360.0
 
-        min_r = np.min(np.where(r >= bbox_dict["radius"][0]))
-        max_r = np.max(np.where(r <= bbox_dict["radius"][1])) + 1
-        min_la = np.min(np.where(lat >= bbox_dict["latitude"][0]))
-        max_la = np.max(np.where(lat <= bbox_dict["latitude"][1])) + 1
-        min_lo = np.min(np.where(lon >= bbox_dict["longitude"][0]))
-        max_lo = np.max(np.where(lon <= bbox_dict["longitude"][1])) + 1
+        min_r = np.min(np.where(r >= bbox_dict[radial_axis][0]))
+        max_r = np.max(np.where(r <= bbox_dict[radial_axis][1])) + 1
+        min_la = np.min(np.where(lat >= bbox_dict[latname][0]))
+        max_la = np.max(np.where(lat <= bbox_dict[latname][1])) + 1
+        min_lo = np.min(np.where(lon >= bbox_dict[lonname][0]))
+        max_lo = np.max(np.where(lon <= bbox_dict[lonname][1])) + 1
 
         # find closest points within valid ranges
-        output_vals = np.full(grid.shape, np.nan, dtype="float64")
+        output_vals = np.full(grid.shape, fill_value, dtype="float64")
         data = xr_ds.data_vars[field_name[1]]
         vals = data.sel(
             {
-                "radius": r[min_r:max_r],
-                "latitude": lat[min_la:max_la],
-                "longitude": lon[min_lo:max_lo],
+                radial_axis: r[min_r:max_r],
+                latname: lat[min_la:max_la],
+                lonname: lon[min_lo:max_lo],
             },
             method="nearest",
         )
@@ -388,7 +470,7 @@ def build_interpolated_cartesian_ds(
         grid_resolution,
         geometry="cartesian",
         bbox=bbox_cart,
-        length_unit="km",
+        length_unit=length_unit,
         axis_order="xyz",
     )
 

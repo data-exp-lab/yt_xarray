@@ -64,6 +64,7 @@ def test_geocentric_embedded():
         [
             "field0",
         ],
+        "radius",
     )
     ad = ds_yt.all_data()
     mn = np.nanmin(ad[("stream", "field0")])
