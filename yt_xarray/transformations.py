@@ -12,30 +12,109 @@ EARTH_RADIUS = _earth_radius * 1.0
 
 
 class Transformer(abc.ABC):
+    """ "
+    The transformer base class, meant to be subclassed, do not use directly.
+
+    Parameters
+    ----------
+    native_coords: Tuple[str]
+        the names of the native coordinates, e.g., ('x0', 'y0', 'z0'), on
+        which data is defined.
+    transformed_coords: Tuple[str]
+        the names of the transformed coordinates, e.g., ('x1', 'y1', 'z1')
+
+    the names of the coordinates will be expected as keyword arguments in the
+    `to_native` and `to_transformed` methods.
+
+    """
+
     def __init__(self, native_coords: Tuple[str], transformed_coords: Tuple[str]):
         self.native_coords = native_coords
+        self._native_coords_set = set(native_coords)
         self.transformed_coords = transformed_coords
+        self._transformed_coords_set = set(transformed_coords)
 
     @abc.abstractmethod
-    def calculate_native(self, **coords):
-        """function to convert from transformed to native coordinates"""
+    def _calculate_native(self, **coords):
+        """
+        function to convert from transformed to native coordinates. Must be
+        implemented by each child class.
+        """
 
     @abc.abstractmethod
-    def calculate_transformed(self, **coords):
-        """function to convert from native to transformed coordinates"""
+    def _calculate_transformed(self, **coords):
+        """
+        function to convert from native to transformed coordinates. Must be
+        implemented by each child class.
+        """
 
     def to_native(self, **coords):
+        """
+        Calculate the native coordinates from transformed coordinates.
+
+        Parameters
+        ----------
+        **coords:
+            coordinate values in transformed coordinate system, provided as
+            individual keyword arguments.
+
+        Returns
+        -------
+        tuple
+            coordinate values in the native coordinate system, in order
+            of .native_coords attribute.
+
+        """
+
+        # Generally, no need to override this method, the actual
+        # coordinate transformation implementation should happen by
+        # overriding `_calculate_native`
+        dim_set = set()
         for dim in coords.keys():
+            # check for validity of each dim
             if dim not in self.transformed_coords:
                 msg = (
                     f"{dim} is not a valid coordinate name. "
                     f"Expected one of {self.transformed_coords}."
                 )
                 raise RuntimeError(msg)
+            dim_set.add(dim)
 
-        return self.calculate_native(**coords)
+        # check that all required coordinates are present
+        if dim_set != self._transformed_coords_set:
+            # find the missing one and raise an error
+            for dim in self.transformed_coords:
+                if dim not in coords:
+                    msg = (
+                        f"The transformed coordinate {dim} was not specified."
+                        "Please provide it as an additional keyword argument."
+                    )
+                    raise RuntimeError(msg)
+
+        return self._calculate_native(**coords)
 
     def to_transformed(self, **coords):
+        """
+        Calculate the transformed coordinates from native coordinates.
+
+        Parameters
+        ----------
+        **coords:
+            coordinate values in native coordinate system, provided as
+            individual keyword arguments.
+
+        Returns
+        -------
+        tuple
+            coordinate values in the transformed coordinate system, in order
+            of .transformed_coords attribute.
+
+        """
+
+        # Generally, no need to override this method, the actual
+        # coordinate transformation implementation should happen by
+        # overriding `_calculate_transformed`
+        dim_set = set()
         for dim in coords.keys():
             if dim not in self.native_coords:
                 msg = (
@@ -43,11 +122,59 @@ class Transformer(abc.ABC):
                     f"Expected one of {self.native_coords}."
                 )
                 raise RuntimeError(msg)
+            dim_set.add(dim)
 
-        return self.calculate_transformed(**coords)
+        # check that all required coordinates are present
+        if dim_set != self._native_coords_set:
+            # find the missing one and raise an error
+            for dim in self.native_coords:
+                if dim not in coords:
+                    msg = (
+                        f"The native coordinate {dim} was not specified."
+                        "Please provide it as an additional keyword argument."
+                    )
+                    raise RuntimeError(msg)
+
+        return self._calculate_transformed(**coords)
 
 
 class LinearScale(Transformer):
+    """
+    A transformer that linearly scales between coordinate systems.
+
+    This transformer is mostly useful for demonstration purposes and simply
+    applies a constant scaling factor for each dimension:
+
+        (x_sc, y_sc, z_sc) = (x_scale, y_scale, z_scale) * (x, y, z)
+
+    Parameters
+    ----------
+    native_coords: Tuple[str]
+        the names of the native coordinates, e.g., ('x', 'y', 'z'), on
+        which data is defined.
+    scale: dict
+        a dictionary containing the scale factor for each dimension. keys
+        should match the native_coords names and missing keys default to a
+        value of 1.0
+
+    The scaled coordinate names are given by appending `'_sc'` to each native
+    coordinate name. e.g., if `native_coords=('x', 'y', 'z')`, then the
+    transformed coordinate names are ('x_sc', 'y_sc', 'z_sc').
+
+    Examples
+    --------
+
+    >>> from yt_xarray.transformations import LinearScale
+    >>> native_coords = ('x', 'y', 'z')
+    >>> scale_factors = {'x': 2., 'y':3., 'z':1.5}
+    >>> lin_scale = LinearScale(native_coords, scale_factors)
+    >>> print(lin_scale.to_transformed(x=1, y=1, z=1))
+    [2., 3., 1.5]
+    >>> print(lin_scale.to_native(x_sc=2., y_sc=3., z_sc=1.5))
+    [1., 1., 1.]
+
+    """
+
     def __init__(self, native_coords: Tuple[str], scale: Optional[dict] = None):
         if scale is None:
             scale = {}
@@ -59,14 +186,14 @@ class LinearScale(Transformer):
         transformed_coords = tuple([nc + "_sc" for nc in native_coords])
         super().__init__(native_coords, transformed_coords)
 
-    def calculate_transformed(self, **coords):
+    def _calculate_transformed(self, **coords):
         transformed = []
         for nc_sc in self.transformed_coords:
-            nc = nc_sc[:-3]
+            nc = nc_sc[:-3]  # native coord name. e.g., go from "x_sc" to just "x"
             transformed.append(np.asarray(coords[nc]) * self.scale[nc])
         return transformed
 
-    def calculate_native(self, **coords):
+    def _calculate_native(self, **coords):
         native = []
         for nc in self.native_coords:
             native.append(np.asarray(coords[nc + "_sc"]) / self.scale[nc])
@@ -79,6 +206,38 @@ _default_radial_axes = dict(
 
 
 class GeocentricCartesian(Transformer):
+    """
+    A transformer to convert between Geodetic coordinates and cartesian,
+    geocentric coordinates.
+
+    Parameters
+    ----------
+    radial_type: str
+        one of ("radius", "depth", "altitude") to indicate the type of
+        radial axis.
+    radial_axis: str
+        Optional string to use as the name for the radial axis, defaults to
+        whatever you provide for radial_type.
+    r_o: float like
+        The reference radius, default is the radius of the Earth.
+
+    transformed_coords names are ("x", "y", "z") and
+    native_coords names are (radial_axis, "latitude", "longitude"). Supply
+    latitude and longitude vlaues in degrees.
+
+    Examples
+    --------
+
+    >>> from yt_xarray.transformations import GeocentricCartesian
+    >>> gc = GeocentricCartesian("depth")
+    >>> x, y, z = gc.to_transformed(depth=100., latitude=42., longitude=220.)
+    >>> print((x, y, z))
+    # (-3626843.0297669284, -3043282.6486153184, 4262969.546178633)
+    >>> print(gc.to_native(x=x,y=y,z=z))
+    # (100.00000000093132, 42.0, 220.0)
+
+    """
+
     def __init__(
         self,
         radial_type: str = "radius",
@@ -92,7 +251,7 @@ class GeocentricCartesian(Transformer):
         )
         _ = _import_optional_dep("aglio", custom_message=emsg)
 
-        transformed_cords = ("x", "y", "z")
+        transformed_coords = ("x", "y", "z")
 
         valid_radial_types = ("radius", "depth", "altitude")
         if radial_type not in valid_radial_types:
@@ -112,9 +271,9 @@ class GeocentricCartesian(Transformer):
         self.radial_axis = radial_axis
         native_coords = (radial_axis, "latitude", "longitude")
 
-        super().__init__(native_coords, transformed_cords)
+        super().__init__(native_coords, transformed_coords)
 
-    def calculate_transformed(self, **coords):
+    def _calculate_transformed(self, **coords):
         ct = _import_optional_dep("aglio.coordinate_transformations")
 
         if self.radial_type == "depth":
@@ -127,7 +286,7 @@ class GeocentricCartesian(Transformer):
         x, y, z = ct.geosphere2cart(coords["latitude"], coords["longitude"], r_val)
         return x, y, z
 
-    def calculate_native(self, **coords):
+    def _calculate_native(self, **coords):
         ct = _import_optional_dep("aglio.coordinate_transformations")
 
         R, lat, lon = ct.cart2sphere(

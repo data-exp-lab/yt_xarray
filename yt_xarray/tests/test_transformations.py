@@ -85,3 +85,14 @@ def test_bad_coord_names():
     assert (x, y, whatever) == (0.5, 1.0, 2.0)
     with pytest.raises(RuntimeError, match="bad_name is not a valid coordinate name"):
         _ = lsc.to_native(x_sc=x, y_sc=y, bad_name=whatever)
+
+
+def test_missing_coord_names():
+    scale = {"whatever": 2.0, "x": 0.5}
+    n_c = ("x", "y", "whatever")
+    lsc = transformations.LinearScale(n_c, scale=scale)
+    with pytest.raises(RuntimeError, match="The native coordinate whatever"):
+        _ = lsc.to_transformed(x=1.0, y=1.0)
+
+    with pytest.raises(RuntimeError, match="The transformed coordinate y_sc"):
+        _ = lsc.to_native(x_sc=1.0, whatever_sc=1.0)
