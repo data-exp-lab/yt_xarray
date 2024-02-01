@@ -274,7 +274,8 @@ class GeocentricCartesian(Transformer):
         super().__init__(native_coords, transformed_coords)
 
     def _calculate_transformed(self, **coords):
-        ct = _import_optional_dep("aglio.coordinate_transformations")
+        # ct = _import_optional_dep("aglio.coordinate_transformations")
+        import aglio.coordinate_transformations as ct
 
         if self.radial_type == "depth":
             r_val = self._r_o - coords[self.radial_axis]
@@ -287,7 +288,8 @@ class GeocentricCartesian(Transformer):
         return x, y, z
 
     def _calculate_native(self, **coords):
-        ct = _import_optional_dep("aglio.coordinate_transformations")
+        # ct = _import_optional_dep("aglio.coordinate_transformations")
+        import aglio.coordinate_transformations as ct
 
         R, lat, lon = ct.cart2sphere(
             coords["x"], coords["y"], coords["z"], geo=True, deg=True
@@ -397,65 +399,93 @@ def build_interpolated_cartesian_ds(
                 np.max(xr_ds.coords[coord].values),
             ]
 
-    # get 3d cartesian bounding box, be sure to use all 8 corners of the
-    # native coordinate bounding box.
-    rads = [
-        bbox_dict[radial_axis][0],
-    ] * 4 + [bbox_dict[radial_axis][1]] * 4
+    # get 3d cartesian bounding box
+    # for global data, cant just use min/max as it will miss +/- x and y
+    # when latitude varies. When the lat/lon grid is small, just build
+    # a full grid to evaluate. When it's large, discretrize with some
+    # probe points.
     la = latname
     lo = lonname
-    lats = [bbox_dict[la][0], bbox_dict[la][0], bbox_dict[la][1], bbox_dict[la][1]] * 2
-    lons = [bbox_dict[lo][0], bbox_dict[lo][1], bbox_dict[lo][1], bbox_dict[lo][0]] * 2
+    if len(xr_ds.coords[la]) <= 100:
+        test_lats = xr_ds.coords[la].values
+    else:
+        test_lats = np.linspace(bbox_dict[la][0], bbox_dict[la][1], 100)
 
-    rads = np.array(rads)
-    lats = np.array(lats)
-    lons = np.array(lons)
-    has_neg_lons = any(lons < 0)
-    cs_to_transform = {radial_axis: rads, latname: lats, lonname: lons}
+    if len(xr_ds.coords[lo]) <= 100:
+        test_lons = xr_ds.coords[lo].values
+    else:
+        test_lons = np.linspace(bbox_dict[lo][0], bbox_dict[lo][1], 100)
+
+    test_lats, test_lons = np.meshgrid(test_lats, test_lons)
+    test_lats = np.ravel(test_lats)
+    test_lons = np.ravel(test_lons)
+
+    rmin = bbox_dict[radial_axis][0]
+    cs_to_transform = {radial_axis: rmin, latname: test_lats, lonname: test_lons}
     x_y_z = gc.to_transformed(**cs_to_transform)
-
     bbox_cart = []
     for idim in range(3):
         bbox_cart.append([np.min(x_y_z[idim]), np.max(x_y_z[idim])])
 
+    rmax = bbox_dict[radial_axis][1]
+    cs_to_transform = {radial_axis: rmax, latname: test_lats, lonname: test_lons}
+    x_y_z = gc.to_transformed(**cs_to_transform)
+    for idim in range(3):
+        bbox_cart[idim][0] = np.min((np.min(x_y_z[idim]), bbox_cart[idim][0]))
+        bbox_cart[idim][1] = np.max((np.max(x_y_z[idim]), bbox_cart[idim][1]))
+
+    has_neg_lons = any(xr_ds.coords[lo].values < 0)
     bbox_cart = np.array(bbox_cart)
 
     def _read_data(grid, field_name):
         # xyz = grid.fcoords
-        xyz = []
+        xyz1d = []
         for idim in range(3):
-            xyz.append(
+            xyz1d.append(
                 np.linspace(
                     grid.LeftEdge[idim], grid.RightEdge[idim], grid.shape[idim]
                 ).d
             )
-
+        xyz = np.meshgrid(*xyz1d)
         r, lat, lon = gc.to_native(x=xyz[0], y=xyz[1], z=xyz[2])
         if has_neg_lons:
             # the native data uses -180, 180, lat above will be 0, 360
             lon_mask = lon > 180.0
             lon[lon_mask] = lon[lon_mask] - 360.0
 
-        min_r = np.min(np.where(r >= bbox_dict[radial_axis][0]))
-        max_r = np.max(np.where(r <= bbox_dict[radial_axis][1])) + 1
-        min_la = np.min(np.where(lat >= bbox_dict[latname][0]))
-        max_la = np.max(np.where(lat <= bbox_dict[latname][1])) + 1
-        min_lo = np.min(np.where(lon >= bbox_dict[lonname][0]))
-        max_lo = np.max(np.where(lon <= bbox_dict[lonname][1])) + 1
-
-        # find closest points within valid ranges
-        output_vals = np.full(grid.shape, fill_value, dtype="float64")
-        data = xr_ds.data_vars[field_name[1]]
-        vals = data.sel(
-            {
-                radial_axis: r[min_r:max_r],
-                latname: lat[min_la:max_la],
-                lonname: lon[min_lo:max_lo],
-            },
-            method="nearest",
+        #
+        r_mask = np.logical_and(
+            r >= bbox_dict[radial_axis][0], r <= bbox_dict[radial_axis][1]
         )
-        # vals = vals.to_numpy().reshape(grid.shape)
-        output_vals[min_r:max_r, min_la:max_la, min_lo:max_lo] = vals
+        # min_r = np.min(np.where(r_mask))
+        # max_r = np.max(np.where(r_mask)) + 1
+        la_mask = np.logical_and(
+            lat >= bbox_dict[latname][0], lat <= bbox_dict[latname][1]
+        )
+        lo_mask = np.logical_and(
+            lon >= bbox_dict[lonname][0], lon <= bbox_dict[lonname][1]
+        )
+        # min_la = np.min(np.where(lat >= bbox_dict[latname][0]))
+        # max_la = np.max(np.where(lat <= bbox_dict[latname][1])) + 1
+        # min_lo = np.min(np.where(lon >= bbox_dict[lonname][0]))
+        # max_lo = np.max(np.where(lon <= bbox_dict[lonname][1])) + 1
+        mask = np.logical_and(r_mask, la_mask, lo_mask).ravel()
+        # find closest points within valid ranges
+        output_vals = np.full(mask.shape, fill_value, dtype="float64")
+
+        data = xr_ds.data_vars[field_name[1]]
+
+        interp_dict = {
+            radial_axis: xr.DataArray(r.ravel()[mask], dims="points"),
+            latname: xr.DataArray(lat.ravel()[mask], dims="points"),
+            lonname: xr.DataArray(lon.ravel()[mask], dims="points"),
+            "method": "nearest",
+        }
+        vals = data.sel(**interp_dict)
+        # vals = vals.to_numpy().reshape(r.shape)
+        output_vals[mask] = vals.to_numpy()
+        output_vals = output_vals.reshape(grid.shape)
+
         return output_vals
 
     data_dict = {}
@@ -465,6 +495,7 @@ def build_interpolated_cartesian_ds(
     if grid_resolution is None:
         grid_resolution = (64, 64, 64)
 
+    # shoudl use load_amr_grids here to allow callables. see
     ds = yt.load_uniform_grid(
         data_dict,
         grid_resolution,
