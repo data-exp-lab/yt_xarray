@@ -170,6 +170,10 @@ def split_grid_at_coord(grid, coord, phi):
 def decompose_image_mask(
     phi: np.ndarray, max_iters=100, ideal_grid_fill=0.9, min_grid_size=10
 ):
+    # following berger and rigoutsos 1991 (https://doi.org/10.1109/21.120081)
+    # to take a binary image mask and construct grids that include the
+    # non-zero pixels of the image mask.
+
     if min_grid_size < 10:
         # must be >=10 due to lowpass filter requirement
         min_grid_size = 10
@@ -192,7 +196,7 @@ def decompose_image_mask(
                 del grids[igrid]
                 # add the new ones to the end
                 grids.extend(new_grids)
-                # do **not** increment igrid, because we deleted one
+                # do **not** increment igrid, because we deleted one.
             else:
                 igrid += 1
         else:
