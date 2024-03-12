@@ -454,6 +454,7 @@ def build_interpolated_cartesian_ds(
             lon_mask = lon > 180.0
             lon[lon_mask] = lon[lon_mask] - 360.0
 
+        # mask out points outside the native domain
         r_mask = np.logical_and(
             r >= bbox_dict[radial_axis][0], r <= bbox_dict[radial_axis][1]
         )
@@ -464,19 +465,26 @@ def build_interpolated_cartesian_ds(
             lon >= bbox_dict[lonname][0], lon <= bbox_dict[lonname][1]
         )
         mask = np.logical_and(r_mask, la_mask, lo_mask).ravel()
+
         # find closest points within valid ranges
         output_vals = np.full(mask.shape, fill_value, dtype="float64")
 
         if np.any(mask):
             data = xr_ds.data_vars[field_name[1]]
 
+            # interp_dict = {
+            #     radial_axis: xr.DataArray(r.ravel()[mask], dims="points"),
+            #     latname: xr.DataArray(lat.ravel()[mask], dims="points"),
+            #     lonname: xr.DataArray(lon.ravel()[mask], dims="points"),
+            #     "method": "nearest",
+            # }
+            # vals = data.sel(**interp_dict)
             interp_dict = {
                 radial_axis: xr.DataArray(r.ravel()[mask], dims="points"),
                 latname: xr.DataArray(lat.ravel()[mask], dims="points"),
                 lonname: xr.DataArray(lon.ravel()[mask], dims="points"),
-                "method": "nearest",
             }
-            vals = data.sel(**interp_dict)
+            vals = data.interp(kwargs=dict(fill_value=np.nan), **interp_dict)
             output_vals[mask] = vals.to_numpy()
         output_vals = output_vals.reshape(grid.shape)
 
