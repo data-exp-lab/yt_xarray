@@ -1,6 +1,10 @@
 import numpy as np
 from scipy.signal import butter, filtfilt
 
+from yt_xarray.transformations import Transformer
+from yt_xarray.utilities._utilities import _import_optional_dep
+from yt_xarray.utilities.logging import ytxr_log
+
 
 def dsig2_dpx2(sig1d):
     dsig1_dpx1 = sig1d[1:] - sig1d[:-1]
@@ -210,6 +214,54 @@ def decompose_image_mask(
     return grids, n_iters
 
 
+def _create_image_mask(bbox_cart, bbox_native, res, tform: Transformer, chunks=100):
+    emsg = (
+        "This functionality requires dask[array], "
+        "install it with `pip install dask[array]`"
+    )
+    da = _import_optional_dep("dask.array", custom_message=emsg)
+
+    # create a geometry image mask
+    res = np.asarray(res)
+    wid = (bbox_cart[:, 1] - bbox_cart[:, 0]) / res
+
+    # grid centers, left and right edges
+    xyz = [
+        bbox_cart[i, 0] + wid[i] * da.arange(res[i], chunks=chunks) for i in range(3)
+    ]
+    xyz = da.meshgrid(*xyz, indexing="ij")
+
+    # mark 1 if any cell corner falls in domain.
+    corner_masks = []
+
+    def _get_corner_mask(bbox_native, tform, xyz, wid, ix, iy, iz):
+        x = xyz[0] + ix * wid[0] / 2.0
+        y = xyz[1] + iy * wid[1] / 2.0
+        z = xyz[2] + iz * wid[2] / 2.0
+        coords = tform.to_native(x=x, y=y, z=z)
+        dim_masks = []
+        for idim in range(3):
+            min_val = bbox_native[idim, 0]
+            max_val = bbox_native[idim, 1]
+            dim_v = coords[idim]
+            msk = np.logical_and(dim_v >= min_val, dim_v <= max_val)
+            dim_masks.append(msk)
+        corner_mask = np.logical_and(*dim_masks)
+        return corner_mask
+
+    for ix in [-1.0, 1.0]:
+        for iy in [-1.0, 1.0]:
+            for iz in [-1.0, 1.0]:
+                corner_masks.append(
+                    _get_corner_mask(bbox_native, tform, xyz, wid, ix, iy, iz)
+                )
+
+    image_mask = corner_masks[0]
+    for msk in corner_masks[1:]:
+        image_mask = np.logical_or(image_mask, msk)
+    return image_mask.compute()
+
+
 def _get_yt_ds(
     image_mask: np.ndarray,
     data_callables: dict,
@@ -217,11 +269,14 @@ def _get_yt_ds(
     max_iters=200,
     min_grid_size=10,
     refine_by=2,
+    **load_kwargs,
 ):
     # first get the grids in pixel dims
     grids, n_iters = decompose_image_mask(
         image_mask, max_iters=max_iters, min_grid_size=min_grid_size
     )
+    msg = f"Decomposed into {len(grids)} grids after {n_iters} iterations."
+    ytxr_log.info(msg)
 
     # build the grid dict list expected by yt
     dxyx = (bbox[:, 1] - bbox[:, 0]) / image_mask.shape
@@ -264,4 +319,5 @@ def _get_yt_ds(
         geometry="cartesian",
         bbox=bbox,
         axis_order="xyz",
+        **load_kwargs,
     )

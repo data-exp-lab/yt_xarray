@@ -6,7 +6,7 @@ import xarray as xr
 import yt
 from unyt import earth_radius as _earth_radius
 
-from yt_xarray.utilities._utilities import _import_optional_dep
+from yt_xarray.utilities.logging import ytxr_log
 
 EARTH_RADIUS = _earth_radius * 1.0
 
@@ -205,6 +205,26 @@ _default_radial_axes = dict(
 )
 
 
+def _sphere_to_cart(r, theta, phi):
+    # r : radius
+    # theta: colatitude
+    # phi: azimuth
+    # returns x, y, z
+    z = r * np.cos(theta)
+    xy = r * np.sin(theta)
+    x = xy * np.cos(phi)
+    y = xy * np.sin(phi)
+    return x, y, z
+
+
+def _cart_to_sphere(x, y, z):
+    xy = x**2 + y**2
+    r = np.sqrt(xy + z**2)
+    theta = np.arccos(z / (r + 1e-12))
+    phi = np.arctan2(y, x)
+    return r, theta, phi
+
+
 class GeocentricCartesian(Transformer):
     """
     A transformer to convert between Geodetic coordinates and cartesian,
@@ -244,13 +264,6 @@ class GeocentricCartesian(Transformer):
         radial_axis: Optional[str] = None,
         r_o=None,
     ):
-        # catch missing dependencies early
-        emsg = (
-            "This functionality requires the aglio package, "
-            "install it with `pip install aglio`"
-        )
-        _ = _import_optional_dep("aglio", custom_message=emsg)
-
         transformed_coords = ("x", "y", "z")
 
         valid_radial_types = ("radius", "depth", "altitude")
@@ -274,9 +287,6 @@ class GeocentricCartesian(Transformer):
         super().__init__(native_coords, transformed_coords)
 
     def _calculate_transformed(self, **coords):
-        # ct = _import_optional_dep("aglio.coordinate_transformations")
-        import aglio.coordinate_transformations as ct
-
         if self.radial_type == "depth":
             r_val = self._r_o - coords[self.radial_axis]
         elif self.radial_type == "altitude":
@@ -284,22 +294,26 @@ class GeocentricCartesian(Transformer):
         else:
             r_val = coords[self.radial_axis]
 
-        x, y, z = ct.geosphere2cart(coords["latitude"], coords["longitude"], r_val)
+        lat, lon = coords["latitude"], coords["longitude"]
+        theta = (90.0 - lat) * np.pi / 180.0  # colatitude in radians
+        phi = lon * np.pi / 180.0  # azimuth in radians
+        x, y, z = _sphere_to_cart(r_val, theta, phi)
         return x, y, z
 
     def _calculate_native(self, **coords):
-        # ct = _import_optional_dep("aglio.coordinate_transformations")
-        import aglio.coordinate_transformations as ct
-
-        R, lat, lon = ct.cart2sphere(
-            coords["x"], coords["y"], coords["z"], geo=True, deg=True
-        )
-
+        r, theta, phi = _cart_to_sphere(coords["x"], coords["y"], coords["z"])
+        lat = 90.0 - theta * 180.0 / np.pi
+        lon = phi * 180.0 / np.pi
+        if isinstance(lon, float):
+            if lon < 0:
+                lon = lon + 360.0
+        else:
+            lon = np.mod(lon, 360)
         if self.radial_type == "altitude":
-            R = R - self._r_o
+            r = r - self._r_o
         elif self.radial_type == "depth":
-            R = self._r_o - R
-        return R, lat, lon
+            r = self._r_o - r
+        return r, lat, lon
 
 
 def build_interpolated_cartesian_ds(
@@ -312,6 +326,10 @@ def build_interpolated_cartesian_ds(
     r_o: Optional[float] = None,
     fill_value: Optional[float] = None,
     length_unit: Optional[str] = "km",
+    refine_grid: Optional[bool] = False,
+    refine_by: Optional[int] = 2,
+    refine_max_iters: Optional[int] = 200,
+    refine_min_grid_size: Optional[int] = 10,
 ):
     """
     Build a yt cartesian dataset containing fields interpolated on demand
@@ -339,6 +357,13 @@ def build_interpolated_cartesian_ds(
         you may want to adjust this.
     length_unit: str
         the length unit to use, defaults to 'km'
+    refine_grid: bool
+        if True (default False), will decompose the interpolated grid one level.
+    refine_max_iters: int
+        if refine_grid is True, max iterations for grid refinement (default 200)
+    refine_min_grid_size:
+        if refine_grid is True, minimum number of elements in refined grid (default 10)
+
 
     Returns
     -------
@@ -362,6 +387,7 @@ def build_interpolated_cartesian_ds(
         msg = f"expected longitude as one dimensions, found {dims}"
         raise ValueError(msg)
 
+    # todo: disambiguate lat, lon
     latname = "latitude"
     lonname = "longitude"
 
@@ -399,6 +425,114 @@ def build_interpolated_cartesian_ds(
                 np.max(xr_ds.coords[coord].values),
             ]
 
+    bbox_cart = _get_cart_bbox_for_geocentric(
+        xr_ds, latname, lonname, bbox_dict, radial_axis, gc
+    )
+
+    # round ?
+    bbox_cart[:, 0] = np.floor(bbox_cart[:, 0])
+    bbox_cart[:, 1] = np.ceil(bbox_cart[:, 1])
+
+    has_neg_lons = any(xr_ds.coords[lonname].values < 0)
+
+    def _read_data(grid, field_name):
+        # xyz = grid.fcoords
+        # xyz1d = []
+        # for idim in range(3):
+        #     xyz1d.append(
+        #         np.linspace(
+        #             grid.LeftEdge[idim], grid.RightEdge[idim], grid.shape[idim]
+        #         ).d
+        #     )
+        # xyz = np.meshgrid(*xyz1d)
+        xyz = grid.fcoords.d
+        rlatlon = gc.to_native(x=xyz[:, 0], y=xyz[:, 1], z=xyz[:, 2])
+
+        r, lat, lon = rlatlon
+        if has_neg_lons:
+            # the native data uses -180, 180, lon above will be 0, 360
+            lon_mask = lon > 180.0
+            lon[lon_mask] = lon[lon_mask] - 360.0
+
+        r_mask = np.logical_and(
+            r >= bbox_dict[radial_axis][0], r <= bbox_dict[radial_axis][1]
+        )
+        la_mask = np.logical_and(
+            lat >= bbox_dict[latname][0], lat <= bbox_dict[latname][1]
+        )
+        lo_mask = np.logical_and(
+            lon >= bbox_dict[lonname][0], lon <= bbox_dict[lonname][1]
+        )
+        mask = np.logical_and(r_mask, la_mask, lo_mask).ravel()
+        # find closest points within valid ranges
+        output_vals = np.full(mask.shape, fill_value, dtype="float64")
+
+        if np.any(mask):
+            data = xr_ds.data_vars[field_name[1]]
+
+            interp_dict = {
+                radial_axis: xr.DataArray(r.ravel()[mask], dims="points"),
+                latname: xr.DataArray(lat.ravel()[mask], dims="points"),
+                lonname: xr.DataArray(lon.ravel()[mask], dims="points"),
+                "method": "nearest",
+            }
+            vals = data.sel(**interp_dict)
+            output_vals[mask] = vals.to_numpy()
+        output_vals = output_vals.reshape(grid.shape)
+
+        return output_vals
+
+    data_dict = {}
+    for field in fields:
+        data_dict[field] = _read_data
+
+    if grid_resolution is None:
+        grid_resolution = (64, 64, 64)
+
+    if refine_grid:
+        from yt_xarray.utilities._grid_decomposition import (
+            _create_image_mask,
+            _get_yt_ds,
+        )
+
+        # create an image mask within bbox
+        ytxr_log.info("Creating image mask for grid decomposition.")
+
+        bbox_geo = []
+        for ax in gc.native_coords:
+            bbox_geo.append(bbox_dict[ax])
+        bbox_geo = np.array(bbox_geo)
+        image_mask = _create_image_mask(
+            bbox_cart, bbox_geo, grid_resolution, gc, chunks=50
+        )
+        ytxr_log.info("Decomposing image mask and building yt dataset.")
+
+        return _get_yt_ds(
+            image_mask,
+            data_dict,
+            bbox_cart,
+            max_iters=refine_max_iters,
+            min_grid_size=refine_min_grid_size,
+            refine_by=refine_by,
+            length_unit=length_unit,
+        )
+
+    ds = yt.load_uniform_grid(
+        data_dict,
+        grid_resolution,
+        geometry="cartesian",
+        bbox=bbox_cart,
+        length_unit=length_unit,
+        axis_order="xyz",
+        nprocs=1,  # placeholder, should relax this when possible.
+    )
+
+    return ds
+
+
+def _get_cart_bbox_for_geocentric(
+    xr_ds, latname, lonname, bbox_dict, radial_axis, gc: GeocentricCartesian
+):
     # get 3d cartesian bounding box
     # for global data, cant just use min/max as it will miss +/- x and y
     # when latitude varies. When the lat/lon grid is small, just build
@@ -433,76 +567,9 @@ def build_interpolated_cartesian_ds(
     for idim in range(3):
         bbox_cart[idim][0] = np.min((np.min(x_y_z[idim]), bbox_cart[idim][0]))
         bbox_cart[idim][1] = np.max((np.max(x_y_z[idim]), bbox_cart[idim][1]))
-
-    has_neg_lons = any(xr_ds.coords[lo].values < 0)
     bbox_cart = np.array(bbox_cart)
 
-    def _read_data(grid, field_name):
-        # xyz = grid.fcoords
-        xyz1d = []
-        for idim in range(3):
-            xyz1d.append(
-                np.linspace(
-                    grid.LeftEdge[idim], grid.RightEdge[idim], grid.shape[idim]
-                ).d
-            )
-        xyz = np.meshgrid(*xyz1d)
-        r, lat, lon = gc.to_native(x=xyz[0], y=xyz[1], z=xyz[2])
-        if has_neg_lons:
-            # the native data uses -180, 180, lat above will be 0, 360
-            lon_mask = lon > 180.0
-            lon[lon_mask] = lon[lon_mask] - 360.0
-
-        #
-        r_mask = np.logical_and(
-            r >= bbox_dict[radial_axis][0], r <= bbox_dict[radial_axis][1]
-        )
-        # min_r = np.min(np.where(r_mask))
-        # max_r = np.max(np.where(r_mask)) + 1
-        la_mask = np.logical_and(
-            lat >= bbox_dict[latname][0], lat <= bbox_dict[latname][1]
-        )
-        lo_mask = np.logical_and(
-            lon >= bbox_dict[lonname][0], lon <= bbox_dict[lonname][1]
-        )
-        # min_la = np.min(np.where(lat >= bbox_dict[latname][0]))
-        # max_la = np.max(np.where(lat <= bbox_dict[latname][1])) + 1
-        # min_lo = np.min(np.where(lon >= bbox_dict[lonname][0]))
-        # max_lo = np.max(np.where(lon <= bbox_dict[lonname][1])) + 1
-        mask = np.logical_and(r_mask, la_mask, lo_mask).ravel()
-        # find closest points within valid ranges
-        output_vals = np.full(mask.shape, fill_value, dtype="float64")
-
-        data = xr_ds.data_vars[field_name[1]]
-
-        interp_dict = {
-            radial_axis: xr.DataArray(r.ravel()[mask], dims="points"),
-            latname: xr.DataArray(lat.ravel()[mask], dims="points"),
-            lonname: xr.DataArray(lon.ravel()[mask], dims="points"),
-            "method": "nearest",
-        }
-        vals = data.sel(**interp_dict)
-        # vals = vals.to_numpy().reshape(r.shape)
-        output_vals[mask] = vals.to_numpy()
-        output_vals = output_vals.reshape(grid.shape)
-
-        return output_vals
-
-    data_dict = {}
-    for field in fields:
-        data_dict[field] = _read_data
-
-    if grid_resolution is None:
-        grid_resolution = (64, 64, 64)
-
-    # shoudl use load_amr_grids here to allow callables. see
-    ds = yt.load_uniform_grid(
-        data_dict,
-        grid_resolution,
-        geometry="cartesian",
-        bbox=bbox_cart,
-        length_unit=length_unit,
-        axis_order="xyz",
-    )
-
-    return ds
+    # round ?
+    bbox_cart[:, 0] = np.floor(bbox_cart[:, 0])
+    bbox_cart[:, 1] = np.ceil(bbox_cart[:, 1])
+    return bbox_cart
