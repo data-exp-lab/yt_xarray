@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.signal import butter, filtfilt
+from yt import load_amr_grids
 
 from yt_xarray.transformations import Transformer
 from yt_xarray.utilities._utilities import _import_optional_dep
@@ -171,6 +172,48 @@ def split_grid_at_coord(grid, coord, phi):
     return new_grids
 
 
+def decompose_image_mask_bisect(
+    phi: np.ndarray, max_iters=100, ideal_grid_fill=0.95, min_grid_size=10
+):
+    # always divides in 2, discards empty grids
+
+    grids = []
+    grids.append(GridBounds((0,) * phi.ndim, phi.shape))
+
+    keepgoing = True
+    igrid = 0
+    n_iters = 0
+
+    while keepgoing:
+        fill_frac = grid_filled_fraction(grids[igrid].le, grids[igrid].re, phi)
+        grid_size_checks = tuple(grids[igrid].size >= min_grid_size)
+        if fill_frac < ideal_grid_fill and np.any(grid_size_checks):
+            grid = grids[igrid]
+            coords = []
+            for dim in range(3):
+                coords.append(int(grid.le[dim] + grid.size[dim] / 2))
+            coords = tuple(coords)
+
+            new_grids = split_grid_at_coord(grids[igrid], coords, phi)
+            if len(new_grids) > 0:
+                # remove divided grid
+                del grids[igrid]
+                # add the new ones to the end
+                grids.extend(new_grids)
+                # do **not** increment igrid, because we deleted one.
+            else:
+                igrid += 1
+        else:
+            igrid += 1
+
+        if igrid >= len(grids) or n_iters >= max_iters:
+            keepgoing = False
+
+        n_iters += 1
+
+    return grids, n_iters
+
+
 def decompose_image_mask(
     phi: np.ndarray, max_iters=100, ideal_grid_fill=0.9, min_grid_size=10
 ):
@@ -272,9 +315,13 @@ def _get_yt_ds(
     **load_kwargs,
 ):
     # first get the grids in pixel dims
-    grids, n_iters = decompose_image_mask(
+    # grids, n_iters = decompose_image_mask(
+    #     image_mask, max_iters=max_iters, min_grid_size=min_grid_size
+    # )
+    grids, n_iters = decompose_image_mask_bisect(
         image_mask, max_iters=max_iters, min_grid_size=min_grid_size
     )
+
     msg = f"Decomposed into {len(grids)} grids after {n_iters} iterations."
     ytxr_log.info(msg)
 
@@ -311,13 +358,12 @@ def _get_yt_ds(
             gdict[ky] = val
         grid_data.append(gdict)
 
-    import yt
-
-    return yt.load_amr_grids(
+    return load_amr_grids(
         grid_data,
         image_mask.shape,
         geometry="cartesian",
         bbox=bbox,
         axis_order="xyz",
+        refine_by=refine_by,
         **load_kwargs,
     )
