@@ -1,3 +1,5 @@
+from typing import Optional, Tuple, Union
+
 import numpy as np
 from scipy.signal import butter, filtfilt
 from yt import load_amr_grids
@@ -257,7 +259,13 @@ def decompose_image_mask(
     return grids, n_iters
 
 
-def _create_image_mask(bbox_cart, bbox_native, res, tform: Transformer, chunks=100):
+def _create_image_mask(
+    bbox_cart: np.ndarray,
+    bbox_native: np.ndarray,
+    res: Union[tuple, np.ndarray],
+    tform: Transformer,
+    chunks: Optional[int] = 100,
+) -> np.ndarray:
     emsg = (
         "This functionality requires dask[array], "
         "install it with `pip install dask[array]`"
@@ -268,16 +276,35 @@ def _create_image_mask(bbox_cart, bbox_native, res, tform: Transformer, chunks=1
     res = np.asarray(res)
     wid = (bbox_cart[:, 1] - bbox_cart[:, 0]) / res
 
-    # grid centers, left and right edges
+    # cell centers
     xyz = [
-        bbox_cart[i, 0] + wid[i] * da.arange(res[i], chunks=chunks) for i in range(3)
+        bbox_cart[i, 0] + wid[i] / 2.0 + wid[i] * da.arange(res[i], chunks=chunks)
+        for i in range(3)
     ]
     xyz = da.meshgrid(*xyz, indexing="ij")
 
     # mark 1 if any cell corner falls in domain.
     corner_masks = []
 
-    def _get_corner_mask(bbox_native, tform, xyz, wid, ix, iy, iz):
+    def _get_corner_mask(
+        bbox_native: np.ndarray,
+        tform: Transformer,
+        xyz: Tuple[np.ndarray, np.ndarray, np.ndarray],
+        wid: np.ndarray,
+        ix: float,
+        iy: float,
+        iz: float,
+    ) -> np.ndarray:
+        # check if an individual corner of a mesh element falls within the native
+        # bounding box.
+        #
+        # bbox_native: bounding box array in native coordinates, in order expected
+        #              by transform
+        # tform: transformer instance
+        # xyz: tuple of xyz arrays
+        # wid: grid spacing in xyz
+        # ix, iy, iz are one of (-1, 1)
+
         x = xyz[0] + ix * wid[0] / 2.0
         y = xyz[1] + iy * wid[1] / 2.0
         z = xyz[2] + iz * wid[2] / 2.0
@@ -289,7 +316,8 @@ def _create_image_mask(bbox_cart, bbox_native, res, tform: Transformer, chunks=1
             dim_v = coords[idim]
             msk = np.logical_and(dim_v >= min_val, dim_v <= max_val)
             dim_masks.append(msk)
-        corner_mask = np.logical_and(*dim_masks)
+        corner_mask = np.logical_and(dim_masks[0], dim_masks[1])
+        corner_mask = np.logical_and(corner_mask, dim_masks[2])
         return corner_mask
 
     for ix in [-1.0, 1.0]:

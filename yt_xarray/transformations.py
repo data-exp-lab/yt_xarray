@@ -305,8 +305,7 @@ def _sphere_to_cart(r, theta, phi):
 
 def _cart_to_sphere(x, y, z):
     # will return phi (azimuth) in +/- np.pi
-    xy = x**2 + y**2
-    r = np.sqrt(xy + z**2)
+    r = np.sqrt(x * x + y * y + z * z)
     theta = np.arccos(z / (r + 1e-12))
     phi = np.arctan2(y, x)
     return r, theta, phi
@@ -527,7 +526,7 @@ def build_interpolated_cartesian_ds(
         sel_dict_type=sel_dict_type,
     )
 
-    bbox_dict = {}
+    bbox_dict = {}  # the bbox in native coordinates, as a dictionary
     for ic, c in enumerate(sel_info.selected_coords):
         bbox_dict[c] = sel_info.selected_bbox[ic, :]
 
@@ -536,12 +535,12 @@ def build_interpolated_cartesian_ds(
 
     # calculate the cartesian bounding box
     bbox_cart = transformer.calculate_transformed_bbox(bbox_dict)
-    bbox_native_valid = {}
+    bbox_native_valid = {}  # native coord bbox dict, with validated names as keys
     for ky in bbox_dict.keys():
         coord = transformer._disambiguate_coord(ky)
         bbox_native_valid[coord] = bbox_dict[ky]
 
-    # round ?
+    # round ? make this an option...
     bbox_cart[:, 0] = np.floor(bbox_cart[:, 0])
     bbox_cart[:, 1] = np.ceil(bbox_cart[:, 1])
 
@@ -550,35 +549,39 @@ def build_interpolated_cartesian_ds(
         x = xyz[:, 0]
         y = xyz[:, 1]
         z = xyz[:, 2]
-        mask = _build_interpolated_domain_mask(x, y, z, transformer, bbox_native_valid)
+
+        mask, native_coords = _build_interpolated_domain_mask(
+            x, y, z, transformer, bbox_native_valid
+        )
 
         # interpolate
         output_vals = np.full(mask.shape, fill_value, dtype="float64")
-
         if np.any(mask):
             output_vals[mask] = 1.0
-            #
-            # data = xr_ds.data_vars[field_name[1]]
-            #
-            # # first apply initial selection
-            # if len(sel_info.sel_dict)>0:
-            #     if sel_info.sel_dict_type == "sel":
-            #         data = data.sel(sel_info.sel_dict)
-            #     else:
-            #         data = data.isel(sel_info.sel_dict)
-            #
-            # # now interpolate
-            # interp_dict = {}
-            # for dim in sel_info.selected_coords:
-            #     known_dim = transformer._disambiguate_coord(dim)
-            #     idim = transformer._native_coord_index[known_dim]
-            #     interp_dict[dim] = xr.DataArray(native_coords[idim].ravel()[mask], dims="points")
-            # if method == 'interpolate':
-            #     vals = data.interp(kwargs=dict(fill_value=np.nan), **interp_dict)
-            # elif method == 'nearest':
-            #     vals = data.sel(interp_dict, method='nearest')
-            #
-            # output_vals[mask] = vals.to_numpy()
+
+            data = xr_ds.data_vars[field_name[1]]
+
+            # first apply initial selection
+            if len(sel_info.sel_dict) > 0:
+                if sel_info.sel_dict_type == "sel":
+                    data = data.sel(sel_info.sel_dict)
+                else:
+                    data = data.isel(sel_info.sel_dict)
+
+            # now interpolate
+            interp_dict = {}
+            for dim in sel_info.selected_coords:
+                known_dim = transformer._disambiguate_coord(dim)
+                idim = transformer._native_coord_index[known_dim]
+                interp_dict[dim] = xr.DataArray(
+                    native_coords[idim].ravel()[mask], dims="points"
+                )
+            if method == "interpolate":
+                vals = data.interp(kwargs=dict(fill_value=np.nan), **interp_dict)
+            elif method == "nearest":
+                vals = data.sel(interp_dict, method="nearest")
+
+            output_vals[mask] = vals.to_numpy()
 
         output_vals = np.reshape(output_vals, grid.shape)
 
@@ -688,4 +691,4 @@ def _build_interpolated_domain_mask(x, y, z, transformer: Transformer, bbox_nati
         c_mask = np.logical_and(coord >= dim_range[0], coord <= dim_range[1])
         mask = np.logical_and(mask, c_mask)
 
-    return mask
+    return mask, native_coords
