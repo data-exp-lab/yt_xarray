@@ -340,15 +340,25 @@ def _get_yt_ds(
     max_iters=200,
     min_grid_size=10,
     refine_by=2,
+    refinement_method="division",
     **load_kwargs,
 ):
     # first get the grids in pixel dims
-    # grids, n_iters = decompose_image_mask(
-    #     image_mask, max_iters=max_iters, min_grid_size=min_grid_size
-    # )
-    grids, n_iters = decompose_image_mask_bisect(
-        image_mask, max_iters=max_iters, min_grid_size=min_grid_size
-    )
+    if refinement_method == "signature_filter":
+        grids, n_iters = decompose_image_mask(
+            image_mask, max_iters=max_iters, min_grid_size=min_grid_size
+        )
+    elif refinement_method == "division":
+        # always divide by 2
+        grids, n_iters = decompose_image_mask_bisect(
+            image_mask, max_iters=max_iters, min_grid_size=min_grid_size
+        )
+    else:
+        msg = (
+            f"refinement_method must be 'signature_filter' or 'division' but "
+            f"found {refinement_method}"
+        )
+        raise ValueError(msg)
 
     msg = f"Decomposed into {len(grids)} grids after {n_iters} iterations."
     ytxr_log.info(msg)

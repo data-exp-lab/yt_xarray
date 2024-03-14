@@ -54,7 +54,7 @@ class Transformer(abc.ABC):
         for ky, val in coord_aliases.items():
             if (
                 val not in self._native_coords_set
-                or val not in self._transformed_coords_set
+                and val not in self._transformed_coords_set
             ):
                 msg = (
                     f"Coordinate alias {ky} must point to a valid native or transformed "
@@ -88,6 +88,42 @@ class Transformer(abc.ABC):
         implemented by each child class.
         """
 
+    def _validate_input_coords(self, coords, input_coord_type: str):
+        assert input_coord_type in ("native", "transformed")
+
+        valid_coords_names = getattr(self, f"{input_coord_type}_coords")
+        valid_coords_set = getattr(self, f"_{input_coord_type}_coords_set")
+
+        new_coords = {}
+
+        dim_set = set()
+        for dim0 in coords.keys():
+            # check for validity of each dim
+            dim = self._disambiguate_coord(dim0)
+            if dim not in valid_coords_names:
+                msg = (
+                    f"{dim} is not a valid coordinate name. "
+                    f"Expected one of {valid_coords_names}"
+                )
+                if len(self.coord_aliases) > 0:
+                    msg += f" or a coordinate alias:\n\n{self.coord_aliases}"
+                raise RuntimeError(msg)
+            new_coords[dim] = coords[dim0]
+            dim_set.add(dim)
+
+        # check that all required coordinates are present
+        if dim_set != valid_coords_set:
+            # find the missing one and raise an error
+            for dim in valid_coords_names:
+                if dim not in coords:
+                    msg = (
+                        f"The {input_coord_type} coordinate {dim} was not specified."
+                        " Please provide it as an additional keyword argument."
+                    )
+                    raise RuntimeError(msg)
+
+        return new_coords
+
     def to_native(self, **coords):
         """
         Calculate the native coordinates from transformed coordinates.
@@ -109,33 +145,9 @@ class Transformer(abc.ABC):
         # Generally, no need to override this method, the actual
         # coordinate transformation implementation should happen by
         # overriding `_calculate_native`
-        dim_set = set()
-        for dim in coords.keys():
-            # check for validity of each dim
-            if dim in self.coord_aliases:
-                dim = self.coord_aliases[dim]
-            if dim not in self.transformed_coords:
-                msg = (
-                    f"{dim} is not a valid coordinate name. "
-                    f"Expected one of {self.transformed_coords}"
-                )
-                if len(self.coord_aliases) > 0:
-                    msg += f" or a coordinate alias:\n\n{self.coord_aliases}"
-                raise RuntimeError(msg)
-            dim_set.add(dim)
 
-        # check that all required coordinates are present
-        if dim_set != self._transformed_coords_set:
-            # find the missing one and raise an error
-            for dim in self.transformed_coords:
-                if dim not in coords:
-                    msg = (
-                        f"The transformed coordinate {dim} was not specified."
-                        "Please provide it as an additional keyword argument."
-                    )
-                    raise RuntimeError(msg)
-
-        return self._calculate_native(**coords)
+        new_coords = self._validate_input_coords(coords, "transformed")
+        return self._calculate_native(**new_coords)
 
     def to_transformed(self, **coords):
         """
@@ -158,32 +170,8 @@ class Transformer(abc.ABC):
         # Generally, no need to override this method, the actual
         # coordinate transformation implementation should happen by
         # overriding `_calculate_transformed`
-        dim_set = set()
-        for dim in coords.keys():
-            if dim in self.coord_aliases:
-                dim = self.coord_aliases[dim]
-            if dim not in self.native_coords:
-                msg = (
-                    f"{dim} is not a valid coordinate name. "
-                    f"Expected one of {self.native_coords}"
-                )
-                if len(self.coord_aliases) > 0:
-                    msg += f" or a coordinate alias:\n\n{self.coord_aliases}"
-                raise RuntimeError(msg)
-            dim_set.add(dim)
-
-        # check that all required coordinates are present
-        if dim_set != self._native_coords_set:
-            # find the missing one and raise an error
-            for dim in self.native_coords:
-                if dim not in coords:
-                    msg = (
-                        f"The native coordinate {dim} was not specified."
-                        "Please provide it as an additional keyword argument."
-                    )
-                    raise RuntimeError(msg)
-
-        return self._calculate_transformed(**coords)
+        new_coords = self._validate_input_coords(coords, "native")
+        return self._calculate_transformed(**new_coords)
 
     @abc.abstractmethod
     def calculate_transformed_bbox(self, bbox_dict: dict):
@@ -464,6 +452,7 @@ def build_interpolated_cartesian_ds(
     refine_by: Optional[int] = 2,
     refine_max_iters: Optional[int] = 200,
     refine_min_grid_size: Optional[int] = 10,
+    refinement_method: Optional[str] = "division",
     sel_dict: Optional[dict] = None,
     sel_dict_type: Optional[str] = "isel",
     method: Optional[str] = "nearest",
@@ -620,6 +609,7 @@ def build_interpolated_cartesian_ds(
             min_grid_size=refine_min_grid_size,
             refine_by=refine_by,
             length_unit=length_unit,
+            refinement_method=refinement_method,
         )
 
     ds = yt.load_uniform_grid(

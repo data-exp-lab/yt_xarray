@@ -51,21 +51,16 @@ def test_geocentric():
 
 def test_geocentric_embedded():
     fields = {
-        "field0": ("radius", "latitude", "longitude"),
+        "field0": ("altitude", "latitude", "longitude"),
     }
     dims = {
-        "radius": (2000, 5000, 32),
+        "altitude": (2000, 5000, 32),
         "latitude": (10, 50, 32),
         "longitude": (10, 50, 22),
     }
     ds = load_random_xr_data(fields, dims)
-    ds_yt = transformations.build_interpolated_cartesian_ds(
-        ds,
-        [
-            "field0",
-        ],
-        "radius",
-    )
+    gc = transformations.GeocentricCartesian(radial_type="altitude", r_o=6371.0)
+    ds_yt = transformations.build_interpolated_cartesian_ds(ds, gc, fields=("field0",))
     ad = ds_yt.all_data()
     mn = np.nanmin(ad[("stream", "field0")])
     mx = np.nanmax(ad[("stream", "field0")])
@@ -79,12 +74,12 @@ def test_bad_coord_names():
     scale = {"whatever": 2.0, "x": 0.5}
     n_c = ("x", "y", "whatever")
     lsc = transformations.LinearScale(n_c, scale=scale)
-    with pytest.raises(RuntimeError, match="bad_name is not a valid coordinate name"):
+    with pytest.raises(ValueError, match="Coordinate name bad_name not found"):
         _ = lsc.to_transformed(x=1.0, y=1.0, bad_name=1.0)
 
     x, y, whatever = lsc.to_transformed(x=1.0, y=1.0, whatever=1.0)
     assert (x, y, whatever) == (0.5, 1.0, 2.0)
-    with pytest.raises(RuntimeError, match="bad_name is not a valid coordinate name"):
+    with pytest.raises(ValueError, match="Coordinate name bad_name not found"):
         _ = lsc.to_native(x_sc=x, y_sc=y, bad_name=whatever)
 
 
@@ -97,3 +92,45 @@ def test_missing_coord_names():
 
     with pytest.raises(RuntimeError, match="The transformed coordinate y_sc"):
         _ = lsc.to_native(x_sc=1.0, whatever_sc=1.0)
+
+
+def test_coord_aliasing():
+    coord_aliases = {"what": "radius"}
+    gc = transformations.GeocentricCartesian(r_o=6371.0, coord_aliases=coord_aliases)
+
+    r_in = 3000.0
+    lat_in = 42.0
+    lon_in = 10.0
+    xyz0 = gc.to_transformed(radius=r_in, latitude=lat_in, longitude=lon_in)
+
+    xyz = gc.to_transformed(what=r_in, latitude=lat_in, longitude=lon_in)
+
+    assert xyz0 == xyz
+
+    coord_aliases = {"what": "bad"}
+    with pytest.raises(ValueError, match="Coordinate alias what must point"):
+        gc = transformations.GeocentricCartesian(coord_aliases=coord_aliases)
+
+
+@pytest.mark.parametrize("method", ("division", "signature_filter"))
+def test_geocentric_embedded_decomposed(method):
+    fields = {
+        "field0": ("altitude", "latitude", "longitude"),
+    }
+    dims = {
+        "altitude": (2000, 5000, 16),
+        "latitude": (10, 50, 16),
+        "longitude": (10, 50, 16),
+    }
+    ds = load_random_xr_data(fields, dims)
+    gc = transformations.GeocentricCartesian(radial_type="altitude", r_o=6371.0)
+    ds_yt = transformations.build_interpolated_cartesian_ds(
+        ds,
+        gc,
+        fields=("field0",),
+        refine_grid=True,
+        refinement_method=method,
+        refine_max_iters=10,
+    )
+
+    assert len(ds_yt.index.grids) > 1
