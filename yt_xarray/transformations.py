@@ -1,5 +1,5 @@
 import abc
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import unyt
@@ -455,7 +455,9 @@ def build_interpolated_cartesian_ds(
     refinement_method: Optional[str] = "division",
     sel_dict: Optional[dict] = None,
     sel_dict_type: Optional[str] = "isel",
+    bbox_dict: Optional[dict] = None,
     method: Optional[str] = "nearest",
+    interp_func: Optional[Callable] = None,
 ):
     """
     Build a yt cartesian dataset containing fields interpolated on demand
@@ -465,6 +467,9 @@ def build_interpolated_cartesian_ds(
     ----------
     xr_ds: xr.Dataset
         the xarray dataset
+    transformer:
+        a Transformer instance that will convert between 3D cartesian coordinates
+        and the native coordinates of the dataset
     fields: tuple
         the fields to include
     radial_type: str
@@ -515,9 +520,10 @@ def build_interpolated_cartesian_ds(
         sel_dict_type=sel_dict_type,
     )
 
-    bbox_dict = {}  # the bbox in native coordinates, as a dictionary
-    for ic, c in enumerate(sel_info.selected_coords):
-        bbox_dict[c] = sel_info.selected_bbox[ic, :]
+    if bbox_dict is None:
+        bbox_dict = {}  # the bbox in native coordinates, as a dictionary
+        for ic, c in enumerate(sel_info.selected_coords):
+            bbox_dict[c] = sel_info.selected_bbox[ic, :]
 
     if fill_value is None:
         fill_value = np.nan
@@ -546,7 +552,9 @@ def build_interpolated_cartesian_ds(
         # interpolate
         output_vals = np.full(mask.shape, fill_value, dtype="float64")
         if np.any(mask):
-            output_vals[mask] = 1.0
+            # short circuit for debugging
+            # output_vals[mask] = 1.0
+            # return np.reshape(output_vals, grid.shape)
 
             data = xr_ds.data_vars[field_name[1]]
 
@@ -557,18 +565,24 @@ def build_interpolated_cartesian_ds(
                 else:
                     data = data.isel(sel_info.sel_dict)
 
-            # now interpolate
-            interp_dict = {}
-            for dim in sel_info.selected_coords:
-                known_dim = transformer._disambiguate_coord(dim)
-                idim = transformer._native_coord_index[known_dim]
-                interp_dict[dim] = xr.DataArray(
-                    native_coords[idim].ravel()[mask], dims="points"
-                )
-            if method == "interpolate":
-                vals = data.interp(kwargs=dict(fill_value=np.nan), **interp_dict)
-            elif method == "nearest":
-                vals = data.sel(interp_dict, method="nearest")
+            if interp_func is not None:
+                native_coords_1 = [
+                    native_coords[idim].ravel()[mask] for idim in range(3)
+                ]
+                vals = interp_func(data=data, coords=native_coords_1)
+            else:
+                # now interpolate
+                interp_dict = {}
+                for dim in sel_info.selected_coords:
+                    known_dim = transformer._disambiguate_coord(dim)
+                    idim = transformer._native_coord_index[known_dim]
+                    interp_dict[dim] = xr.DataArray(
+                        native_coords[idim].ravel()[mask], dims="points"
+                    )
+                if method == "interpolate":
+                    vals = data.interp(kwargs=dict(fill_value=np.nan), **interp_dict)
+                elif method == "nearest":
+                    vals = data.sel(interp_dict, method="nearest")
 
             output_vals[mask] = vals.to_numpy()
 
