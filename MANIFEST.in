@@ -16,4 +16,5 @@ recursive-include docs *.ipynb
 recursive-exclude * .ipynb_checkpoints/*
 recursive-exclude docs/_build *
 recursive-include docs *.rst conf.py Makefile make.bat *.jpg *.png *.gif
+recursive-include docs *.py
 recursive-include yt_xarray *.py
