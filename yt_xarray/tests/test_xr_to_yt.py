@@ -566,3 +566,9 @@ def test_missing_cfxarray(monkeypatch):
         with pytest.raises(ValueError, match=f"{clist[0]} is not"):
 
             _ = xr2yt._convert_to_yt_internal_coords(clist, xr_da)
+
+
+def test_coord_alias_reset():
+    xr2yt.known_coord_aliases["blah"] = "lwkerj"
+    xr2yt.reset_coordinate_aliases()
+    assert "blah" not in xr2yt.known_coord_aliases

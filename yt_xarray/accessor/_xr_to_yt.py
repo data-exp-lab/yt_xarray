@@ -324,10 +324,26 @@ _coord_aliases = {
 }
 
 
-known_coord_aliases = {}
+_default_known_coord_aliases = {}
 for ky, vals in _coord_aliases.items():
     for val in vals:
-        known_coord_aliases[val] = ky
+        _default_known_coord_aliases[val] = ky
+
+known_coord_aliases = _default_known_coord_aliases.copy()
+
+
+def reset_coordinate_aliases():
+    kys_to_pop = [
+        ky
+        for ky in known_coord_aliases.keys()
+        if ky not in _default_known_coord_aliases
+    ]
+    for ky in kys_to_pop:
+        known_coord_aliases.pop(ky)
+
+    for ky, val in _default_known_coord_aliases.items():
+        known_coord_aliases[ky] = val
+
 
 _expected_yt_axes = {
     "cartesian": set(["x", "y", "z"]),
