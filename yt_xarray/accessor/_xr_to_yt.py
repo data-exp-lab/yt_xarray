@@ -1,5 +1,6 @@
 import collections.abc
 import enum
+from collections import defaultdict
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -56,7 +57,10 @@ class Selection:
         self.global_dims: list = None
         self._process_selection(xr_ds)
 
-        self.yt_coord_names = _convert_to_yt_internal_coords(self.selected_coords)
+        xr_field = xr_ds.data_vars[fields[0]]
+        self.yt_coord_names = _convert_to_yt_internal_coords(
+            self.selected_coords, xr_field
+        )
 
     def _find_units(self, xr_ds) -> dict:
         units = {}
@@ -339,20 +343,55 @@ for vals in _expected_yt_axes.values():
     _yt_coord_names += list(vals)
 
 
-def _convert_to_yt_internal_coords(coord_list):
+def _invert_cf_standard_names(standard_names: dict):
+    inverted_mapping = defaultdict(lambda: set())
+    for ky, vals in standard_names.items():
+        for val in vals:
+            inverted_mapping[val].add(ky)
+    return inverted_mapping
+
+
+def _cf_xr_coord_disamb(
+    cname: str, xr_field: xr.DataArray
+) -> Tuple[Optional[str], bool]:
+    # returns a tuple of (validated name, cf_xarray_is_installed)
+    try:
+        import cf_xarray as cfx  # noqa: F401
+    except ImportError:
+        return None, False
+
+    nm_to_standard = _invert_cf_standard_names(xr_field.cf.standard_names)
+    if cname in nm_to_standard:
+        cf_standard_name = nm_to_standard[cname]
+        if len(cf_standard_name):
+            cf_standard_name = list(cf_standard_name)[0]
+            if cf_standard_name in known_coord_aliases:
+                return cf_standard_name, True
+    return None, True
+
+
+def _convert_to_yt_internal_coords(coord_list: List[str], xr_field: xr.DataArray):
     yt_coords = []
     for c in coord_list:
         cname = c.lower()
+        cf_xarray_exists = None
         if cname in known_coord_aliases:
-            yt_coords.append(known_coord_aliases[cname])
+            valid_coord_name = known_coord_aliases[cname]
         elif cname in _yt_coord_names:
-            yt_coords.append(cname)
+            valid_coord_name = cname
         else:
-            raise ValueError(
+            valid_coord_name, cf_xarray_exists = _cf_xr_coord_disamb(cname, xr_field)
+        if valid_coord_name is None:
+            msg = (
                 f"{c} is not a known coordinate. To load in yt, you "
-                f"must supply an alias via the yt_xarray.known_coord_aliases"
-                f" dictionary."
+                "must supply an alias via the yt_xarray.known_coord_aliases"
+                " dictionary"
             )
+            if cf_xarray_exists is False:
+                msg += " or install cf_xarray to check for additional aliases."
+            raise ValueError(msg)
+
+        yt_coords.append(valid_coord_name)
 
     return yt_coords
 

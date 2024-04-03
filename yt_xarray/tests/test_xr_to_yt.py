@@ -533,3 +533,19 @@ def test_reversed_axis(stretched, use_callable, chunksizes):
     pdy_lats = slc._generate_container_field("pdy")
     assert np.all(pdy_lats > 0)
     assert np.all(np.isfinite(vals))
+
+
+def test_cf_xarray_disambiguation():
+    from cf_xarray.datasets import airds
+
+    # run the whole selection (will internally run coord disambiguation)
+    sel = xr2yt.Selection(
+        airds, fields=["air"], sel_dict={"time": 0}, sel_dict_type="isel"
+    )
+    xr_da = airds.air
+    selected_names = []
+    for c in sel.selected_coords:
+        selected_names.append(xr2yt._cf_xr_coord_disamb(c, xr_da)[0])
+
+    assert "latitude" in selected_names
+    assert "longitude" in selected_names
