@@ -1,3 +1,5 @@
+import builtins
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -549,3 +551,18 @@ def test_cf_xarray_disambiguation():
 
     assert "latitude" in selected_names
     assert "longitude" in selected_names
+
+
+def test_missing_cfxarray(monkeypatch):
+    from cf_xarray.datasets import airds
+
+    def _bad_import(name, globals=None, locals=None, fromlist=(), level=0):
+        raise ImportError
+
+    xr_da = airds.air
+    clist = list(xr_da.dims)
+    with monkeypatch.context() as m:
+        m.setattr(builtins, "__import__", _bad_import)
+        with pytest.raises(ValueError, match=f"{clist[0]} is not"):
+
+            _ = xr2yt._convert_to_yt_internal_coords(clist, xr_da)
