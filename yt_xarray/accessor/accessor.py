@@ -4,6 +4,7 @@ from typing import List, Optional, Union
 import numpy as np
 import xarray as xr
 import yt
+from numpy.typing import ArrayLike
 from unyt import unyt_quantity
 
 from yt_xarray.accessor import _xr_to_yt
@@ -37,7 +38,7 @@ class YtAccessor:
         use_callable: bool = True,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
-        chunksizes: Optional[int] = None,
+        chunksizes: Optional[Union[int, ArrayLike]] = None,
         **kwargs,
     ):
         """
@@ -63,6 +64,11 @@ class YtAccessor:
         sel_dict_type: str
             either "isel" (default) or "sel" to indicate index or value selection for
             sel_dict.
+
+        chunksizes: int or ArrayLike
+            if set, will decompose the grid into multiple grids with grid dimensions
+            of chunksizes. Can be a single integer (same chunksize in each dimensions)
+            or an ArrayLike object of the same length as the number of dimensions.
 
         kwargs :
             any additional keyword arguments to pass to yt.load_uniform_grid
