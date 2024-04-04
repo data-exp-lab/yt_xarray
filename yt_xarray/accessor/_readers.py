@@ -32,8 +32,8 @@ def _get_xarray_reader(
                 # note that the si, ei are exchanged!
                 si0 = si.copy()
                 ei0 = ei.copy()
-                si[idim] = sel_info.global_dims[idim] - ei0[idim]
-                ei[idim] = sel_info.global_dims[idim] - si0[idim]
+                si[idim] = sel_info.global_dims_no_time[idim] - ei0[idim]
+                ei[idim] = sel_info.global_dims_no_time[idim] - si0[idim]
 
         # step 2: this global start index accounts for indexing after any
         # subselections on the xarray DataArray are made. might

@@ -533,3 +533,25 @@ def test_reversed_axis(stretched, use_callable, chunksizes):
     pdy_lats = slc._generate_container_field("pdy")
     assert np.all(pdy_lats > 0)
     assert np.all(np.isfinite(vals))
+
+
+def test_reader_with_2d_space_time_and_reverse_axis():
+
+    # test for https://github.com/data-exp-lab/yt_xarray/issues/86
+
+    # a base xarray ds to be used in various places.
+    ds = construct_ds_with_extra_dim(
+        3,
+        ncoords=5,
+        nd_space=2,
+        reverse_indices=[
+            1,
+        ],
+    )
+
+    field = ("stream", "test_case_3")
+    ds_yt = ds.yt.load_grid(
+        "test_case_3", sel_dict={"time": 0}, geometry="geographic", use_callable=True
+    )
+    slc = yt.SlicePlot(ds_yt, "altitude", field)
+    assert np.all(np.isfinite(slc.frb[field]))

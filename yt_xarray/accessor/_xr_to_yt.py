@@ -54,6 +54,7 @@ class Selection:
         self.grid_type = None  # one of _GridType members
         self.cell_widths: list = None
         self.global_dims: list = None
+        self.time_index_number: int = None
         self._process_selection(xr_ds)
 
         self.yt_coord_names = _convert_to_yt_internal_coords(self.selected_coords)
@@ -130,7 +131,8 @@ class Selection:
         reverse_axis = []  # axes must be positive-monitonic for yt
         reverse_axis_names = []
         global_dims = []  # the global shape
-        for c in full_coords:
+        time_index_number = None
+        for icoord, c in enumerate(full_coords):
             coord_da = getattr(xr_ds, c)  # the full coordinate data array
 
             # check if coordinate values are increasing
@@ -156,6 +158,8 @@ class Selection:
             sel_or_isel = getattr(coord_da, self.sel_dict_type)
             coord_vals = sel_or_isel(coord_select).values.astype(np.float64)
             is_time_dim = _check_for_time(c, coord_vals)
+            if is_time_dim:
+                time_index_number = icoord
 
             if coord_vals.size > 1:
                 # not positive-monotonic? reverse it for cell width calculations
@@ -193,6 +197,8 @@ class Selection:
         self.ndims = len(n_edges)
         self.selected_shape = tuple(n_edges)
         self.select_shape_cells = tuple(n_cells)
+        if time_index_number is not None:
+            _ = full_dimranges.pop(time_index_number)
         self.full_bbox = np.array(full_dimranges).astype(np.float64)
         self.selected_bbox = np.array(dimranges).astype(np.float64)
         self.full_coords = tuple(full_coords)
@@ -201,9 +207,15 @@ class Selection:
         self.selected_time = time
         self.grid_type = grid_type
         self.cell_widths = cell_widths
-        self.reverse_axis = reverse_axis
         self.reverse_axis_names = reverse_axis_names
         self.global_dims = np.array(global_dims)
+        if time_index_number is not None:
+            _ = global_dims.pop(time_index_number)
+            _ = reverse_axis.pop(time_index_number)
+        self.reverse_axis = reverse_axis
+        self.time_index_number = time_index_number
+        self.global_dims_no_time = np.array(global_dims)
+
         # self.coord_selected_arrays = coord_selected_arrays
 
         # set the yt grid dictionary
