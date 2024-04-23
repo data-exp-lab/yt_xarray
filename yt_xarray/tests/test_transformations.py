@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import xarray as xr
 
 from yt_xarray import transformations
 from yt_xarray.sample_data import load_random_xr_data
@@ -17,6 +18,11 @@ def test_linear():
     lsc = transformations.LinearScale(n_c)
     for ky in n_c:
         assert lsc.scale[ky] == 1.0
+
+    bbox_in = np.array([[0.0, 2.0], [0.0, 2.0], [0.0, 2.0]])
+    bbox_dict_in = {"x": bbox_in[0, :], "y": bbox_in[1, :], "whatever": bbox_in[2, :]}
+    bbox_out = lsc.calculate_transformed_bbox(bbox_dict_in)
+    assert np.all(bbox_in == bbox_out)
 
 
 def test_geocentric():
@@ -49,7 +55,36 @@ def test_geocentric():
     assert np.allclose(altitude_out, altitude_in)
 
 
-def test_geocentric_embedded():
+def test_gc_cartesian_bounding_box():
+    gc = transformations.GeocentricCartesian(radial_type="altitude", r_o=1000.0)
+    bbox_gc = {
+        "altitude": [0.0, 1000.0],
+        "latitude": [-90.0, 90.0],
+        "longitude": [0.0, 360.0],
+    }
+    bbox_cart = gc.calculate_transformed_bbox(bbox_dict=bbox_gc)
+    assert bbox_cart.min() == -2000.0
+    assert bbox_cart.max() == 2000.0
+
+
+def test_gc_negative_lons():
+    gc = transformations.GeocentricCartesian()
+    gc_nl = transformations.GeocentricCartesian(use_neg_lons=True)
+    r_in = 3000.0
+    lat_in = 42.0
+    lon_in = 220.0
+    expected_lon = lon_in - 360.0
+    x, y, z = gc.to_transformed(radius=r_in, latitude=lat_in, longitude=lon_in)
+
+    r_out, lat_out, lon_out = gc.to_native(x=x, y=y, z=z)
+    r_out_nl, lat_out_nl, lon_out_nl = gc_nl.to_native(x=x, y=y, z=z)
+    assert lon_out_nl == expected_lon
+    assert lon_out_nl == expected_lon
+    assert r_out == r_out_nl
+    assert lat_out == lat_out_nl
+
+
+def test_geocentric_embedded(xr_ds_for_tform):
     fields = {
         "field0": ("altitude", "latitude", "longitude"),
     }
@@ -112,8 +147,8 @@ def test_coord_aliasing():
         gc = transformations.GeocentricCartesian(coord_aliases=coord_aliases)
 
 
-@pytest.mark.parametrize("method", ("division", "signature_filter"))
-def test_geocentric_embedded_decomposed(method):
+@pytest.fixture(scope="module")
+def xr_ds_for_tform():
     fields = {
         "field0": ("altitude", "latitude", "longitude"),
     }
@@ -123,14 +158,74 @@ def test_geocentric_embedded_decomposed(method):
         "longitude": (10, 50, 16),
     }
     ds = load_random_xr_data(fields, dims)
+    return ds
+
+
+@pytest.mark.parametrize("refine_method", ("division", "signature_filter"))
+def test_geocentric_embedded_decomposed(refine_method, xr_ds_for_tform):
+    ds = xr_ds_for_tform
     gc = transformations.GeocentricCartesian(radial_type="altitude", r_o=6371.0)
     ds_yt = transformations.build_interpolated_cartesian_ds(
         ds,
         gc,
-        fields=("field0",),
         refine_grid=True,
-        refinement_method=method,
+        refinement_method=refine_method,
         refine_max_iters=10,
     )
 
     assert len(ds_yt.index.grids) > 1
+
+
+def test_gc_build_interpolated_cartesian_ds_options(xr_ds_for_tform):
+    ds = xr_ds_for_tform
+    gc = transformations.GeocentricCartesian(radial_type="altitude", r_o=6371.0)
+    _ = transformations.build_interpolated_cartesian_ds(
+        ds,
+        gc,
+        fields="field0",
+    )
+
+    with pytest.raises(ValueError, match="refinement_method must be "):
+        _ = transformations.build_interpolated_cartesian_ds(
+            ds,
+            gc,
+            refine_grid=True,
+            refinement_method="not_a_method",
+        )
+
+    with pytest.raises(ValueError, match="interp_method must be one of"):
+        _ = transformations.build_interpolated_cartesian_ds(
+            ds,
+            gc,
+            interp_method="not_a_method",
+        )
+
+
+def test_embedded_interp_method(xr_ds_for_tform):
+    ds = xr_ds_for_tform
+    gc = transformations.GeocentricCartesian(radial_type="altitude", r_o=6371.0)
+    ds_yt = transformations.build_interpolated_cartesian_ds(
+        ds, gc, fields=("field0",), interp_method="interpolate"
+    )
+    ad = ds_yt.all_data()
+    mn = np.nanmin(ad[("stream", "field0")])
+    mx = np.nanmax(ad[("stream", "field0")])
+    assert np.isfinite(mn)
+    assert np.isfinite(mx)
+    assert mn > 0
+    assert mx > mn
+
+    def over_ride_ones(data=None, coords=None):
+        assert len(coords) == 3
+        assert isinstance(data, xr.DataArray)
+        data_size = coords[0].shape
+        return np.ones(data_size)
+
+    ds_yt = transformations.build_interpolated_cartesian_ds(
+        ds, gc, fields=("field0",), interp_func=over_ride_ones
+    )
+
+    ad = ds_yt.all_data()
+    vals = ad["stream", "field0"]
+    vals = vals[np.isfinite(vals)]
+    assert np.all(vals == 1.0)

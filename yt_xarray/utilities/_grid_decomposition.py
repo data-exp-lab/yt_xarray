@@ -105,9 +105,6 @@ def find_grid_division_coord_1d(grid, phi, dim):
     coord = find_max_change(dx2d2, filtered)
     # bump to global index
     coord = coord + grid.le[dim]
-    if coord < grid.le[dim] or coord > grid.re[dim]:
-        raise RuntimeError()
-
     return coord
 
 
@@ -192,7 +189,7 @@ def decompose_image_mask_bisect(
         if fill_frac < ideal_grid_fill and np.any(grid_size_checks):
             grid = grids[igrid]
             coords = []
-            for dim in range(3):
+            for dim in range(phi.ndim):
                 coords.append(int(grid.le[dim] + grid.size[dim] / 2))
             coords = tuple(coords)
 

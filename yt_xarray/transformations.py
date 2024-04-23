@@ -24,6 +24,9 @@ class Transformer(abc.ABC):
         which data is defined.
     transformed_coords: Tuple[str]
         the names of the transformed coordinates, e.g., ('x1', 'y1', 'z1')
+    coord_aliases: dict
+        optional dictionary of coordinate aliases to map arbitrary keys to
+        a native or transformed coordinate name.
 
     the names of the coordinates will be expected as keyword arguments in the
     `to_native` and `to_transformed` methods.
@@ -100,14 +103,6 @@ class Transformer(abc.ABC):
         for dim0 in coords.keys():
             # check for validity of each dim
             dim = self._disambiguate_coord(dim0)
-            if dim not in valid_coords_names:
-                msg = (
-                    f"{dim} is not a valid coordinate name. "
-                    f"Expected one of {valid_coords_names}"
-                )
-                if len(self.coord_aliases) > 0:
-                    msg += f" or a coordinate alias:\n\n{self.coord_aliases}"
-                raise RuntimeError(msg)
             new_coords[dim] = coords[dim0]
             dim_set.add(dim)
 
@@ -142,7 +137,7 @@ class Transformer(abc.ABC):
 
         """
 
-        # Generally, no need to override this method, the actual
+        # Generally, no need to override this interp_method, the actual
         # coordinate transformation implementation should happen by
         # overriding `_calculate_native`
 
@@ -167,7 +162,7 @@ class Transformer(abc.ABC):
 
         """
 
-        # Generally, no need to override this method, the actual
+        # Generally, no need to override this interp_method, the actual
         # coordinate transformation implementation should happen by
         # overriding `_calculate_transformed`
         new_coords = self._validate_input_coords(coords, "native")
@@ -270,7 +265,7 @@ class LinearScale(Transformer):
 
         # since this is a linear scaling, bbox dims will be independent and
         # can simply treat the bounding box as the points
-        transformed = self.transformed_coords(**bbox_dict)
+        transformed = self.to_transformed(**bbox_dict)
         return transformed
 
 
@@ -314,6 +309,11 @@ class GeocentricCartesian(Transformer):
         whatever you provide for radial_type.
     r_o: float like
         The reference radius, default is the radius of the Earth.
+    coord_aliases: dict
+        Optional dictionary of additional coordinate aliases.
+    use_neg_lons: bool
+        If False (the default), will expect longitude in the range 0, 360. If
+        True, will expect longitude in the range -180, 180.
 
     transformed_coords names are ("x", "y", "z") and
     native_coords names are (radial_axis, "latitude", "longitude"). Supply
@@ -456,7 +456,7 @@ def build_interpolated_cartesian_ds(
     sel_dict: Optional[dict] = None,
     sel_dict_type: Optional[str] = "isel",
     bbox_dict: Optional[dict] = None,
-    method: Optional[str] = "nearest",
+    interp_method: Optional[str] = "nearest",
     interp_func: Optional[Callable] = None,
 ):
     """
@@ -492,6 +492,14 @@ def build_interpolated_cartesian_ds(
         if refine_grid is True, max iterations for grid refinement (default 200)
     refine_min_grid_size:
         if refine_grid is True, minimum number of elements in refined grid (default 10)
+    interp_method: str
+        interpolation method: 'nearest' or 'interpolate'. Defaults to 'nearest'.
+        If 'interpolate', will use linear nd interpolation.
+    interp_func: Callable
+        a custom interpolation function, method is ignored. The function will
+        be called with interp_func(data=data_array, coords=eval_coords), where
+        data_array is an xarray data array and eval_coords is a list of 1d
+        np.ndarray ordered by the data_array.dims
 
 
     Returns
@@ -507,9 +515,16 @@ def build_interpolated_cartesian_ds(
         fields = list(xr_ds.data_vars)
 
     valid_methods = ("interpolate", "nearest")
-    if method not in valid_methods:
-        msg = f"method must be one of: {valid_methods}, found {method}."
+    if interp_method not in valid_methods:
+        msg = f"interp_method must be one of: {valid_methods}, found {interp_method}."
         raise ValueError(msg)
+    if interp_func is not None:
+        if interp_method == "nearest":
+            ytxr_log.info(
+                "Interpolation function provided, switching interp_method to 'interpolate'."
+            )
+            interp_method = "interpolate"
+
     if isinstance(fields, str):
         fields = (fields,)
 
@@ -552,10 +567,6 @@ def build_interpolated_cartesian_ds(
         # interpolate
         output_vals = np.full(mask.shape, fill_value, dtype="float64")
         if np.any(mask):
-            # short circuit for debugging
-            # output_vals[mask] = 1.0
-            # return np.reshape(output_vals, grid.shape)
-
             data = xr_ds.data_vars[field_name[1]]
 
             # first apply initial selection
@@ -570,6 +581,7 @@ def build_interpolated_cartesian_ds(
                     native_coords[idim].ravel()[mask] for idim in range(3)
                 ]
                 vals = interp_func(data=data, coords=native_coords_1)
+                output_vals[mask] = vals
             else:
                 # now interpolate
                 interp_dict = {}
@@ -579,12 +591,12 @@ def build_interpolated_cartesian_ds(
                     interp_dict[dim] = xr.DataArray(
                         native_coords[idim].ravel()[mask], dims="points"
                     )
-                if method == "interpolate":
+                if interp_method == "interpolate":
                     vals = data.interp(kwargs=dict(fill_value=np.nan), **interp_dict)
-                elif method == "nearest":
+                elif interp_method == "nearest":
                     vals = data.sel(interp_dict, method="nearest")
 
-            output_vals[mask] = vals.to_numpy()
+                output_vals[mask] = vals.to_numpy()
 
         output_vals = np.reshape(output_vals, grid.shape)
 
@@ -637,51 +649,6 @@ def build_interpolated_cartesian_ds(
     )
 
     return ds
-
-
-def _get_cart_bbox_for_geocentric(
-    xr_ds, latname, lonname, bbox_dict, radial_axis, gc: GeocentricCartesian
-):
-    # get 3d cartesian bounding box
-    # for global data, cant just use min/max as it will miss +/- x and y
-    # when latitude varies. When the lat/lon grid is small, just build
-    # a full grid to evaluate. When it's large, discretrize with some
-    # probe points.
-    la = latname
-    lo = lonname
-    if len(xr_ds.coords[la]) <= 100:
-        test_lats = xr_ds.coords[la].values
-    else:
-        test_lats = np.linspace(bbox_dict[la][0], bbox_dict[la][1], 100)
-
-    if len(xr_ds.coords[lo]) <= 100:
-        test_lons = xr_ds.coords[lo].values
-    else:
-        test_lons = np.linspace(bbox_dict[lo][0], bbox_dict[lo][1], 100)
-
-    test_lats, test_lons = np.meshgrid(test_lats, test_lons)
-    test_lats = np.ravel(test_lats)
-    test_lons = np.ravel(test_lons)
-
-    rmin = bbox_dict[radial_axis][0]
-    cs_to_transform = {radial_axis: rmin, latname: test_lats, lonname: test_lons}
-    x_y_z = gc.to_transformed(**cs_to_transform)
-    bbox_cart = []
-    for idim in range(3):
-        bbox_cart.append([np.min(x_y_z[idim]), np.max(x_y_z[idim])])
-
-    rmax = bbox_dict[radial_axis][1]
-    cs_to_transform = {radial_axis: rmax, latname: test_lats, lonname: test_lons}
-    x_y_z = gc.to_transformed(**cs_to_transform)
-    for idim in range(3):
-        bbox_cart[idim][0] = np.min((np.min(x_y_z[idim]), bbox_cart[idim][0]))
-        bbox_cart[idim][1] = np.max((np.max(x_y_z[idim]), bbox_cart[idim][1]))
-    bbox_cart = np.array(bbox_cart)
-
-    # round ?
-    bbox_cart[:, 0] = np.floor(bbox_cart[:, 0])
-    bbox_cart[:, 1] = np.ceil(bbox_cart[:, 1])
-    return bbox_cart
 
 
 def _build_interpolated_domain_mask(x, y, z, transformer: Transformer, bbox_native):
