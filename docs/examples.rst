@@ -22,4 +22,4 @@ These notebooks demonstrate `yt_xarray` usage:
 - Example 005: :doc:`examples/example_005_chunked_data`
 - Example 006: :doc:`examples/example_006_yt_method_access`
 - Example 007: :doc:`examples/example_007_interpolation`
-- Example 008: :doc:`examples/example_007_interpolation_with_refinement`
+- Example 008: :doc:`examples/example_008_interpolation_with_refinement`
