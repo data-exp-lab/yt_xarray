@@ -169,7 +169,7 @@ class Transformer(abc.ABC):
         return self._calculate_transformed(**new_coords)
 
     @abc.abstractmethod
-    def calculate_transformed_bbox(self, bbox_dict: dict):
+    def calculate_transformed_bbox(self, bbox_dict: dict) -> np.ndarray:
         """
         Calculates a bounding box in transformed coordinates for a bounding box dictionary
         in native coordinates.
@@ -247,7 +247,7 @@ class LinearScale(Transformer):
             native.append(np.asarray(coords[nc + "_sc"]) / self.scale[nc])
         return native
 
-    def calculate_transformed_bbox(self, bbox_dict: dict):
+    def calculate_transformed_bbox(self, bbox_dict: dict) -> np.ndarray:
         """
         Calculates a bounding box in transformed coordinates for a bounding box dictionary
         in native coordinates.
@@ -393,7 +393,7 @@ class GeocentricCartesian(Transformer):
             r = self._r_o - r
         return r, lat, lon
 
-    def calculate_transformed_bbox(self, bbox_dict: dict):
+    def calculate_transformed_bbox(self, bbox_dict: dict) -> np.ndarray:
         """
         Calculates a bounding box in transformed coordinates for a bounding box dictionary
         in native coordinates.
