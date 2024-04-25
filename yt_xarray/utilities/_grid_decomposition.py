@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from scipy.signal import butter, filtfilt
@@ -9,14 +9,14 @@ from yt_xarray.utilities._utilities import _import_optional_dep
 from yt_xarray.utilities.logging import ytxr_log
 
 
-def dsig2_dpx2(sig1d):
+def _dsig2_dpx2(sig1d):
     dsig1_dpx1 = sig1d[1:] - sig1d[:-1]
     dsig2_dpx2 = np.zeros(sig1d.shape)
     dsig2_dpx2[1:-1] = dsig1_dpx1[1:] - dsig1_dpx1[:-1]
     return dsig2_dpx2
 
 
-def lowpass_filter(sig_1d):
+def _lowpass_filter(sig_1d):
     # pass a signature array through a lowpass filter. should expose some of these
     # for when a grid is not properly decomposing...
     order = 2  # keep at 2
@@ -30,7 +30,7 @@ def lowpass_filter(sig_1d):
 class GridBounds:
     # minimal grid representation. not trying to recreate yt here... just
     # need a convenient container.
-    def __init__(self, le, re):
+    def __init__(self, le: Tuple[int, ...], re: Tuple[int, ...]):
         self.le = le
         self.re = re
         if np.any(~np.isfinite(self.le)):
@@ -43,6 +43,8 @@ class GridBounds:
         self.nd = len(le)
 
     def plot(self, ax, **kwargs):
+        # add a rectangle patch for this grid to a matplotlib axis.
+        # all kwargs forwarded to matplotlib.patches.Rectangle
         if self.nd > 2:
             msg = "Grid patch plotting is only implemented for 2d grids."
             raise NotImplementedError(msg)
@@ -57,7 +59,7 @@ class GridBounds:
         ax.add_patch(rect)
 
 
-def find_max_change(f_d2_d2, f):
+def _find_max_change(f_d2_d2: np.ndarray, f: np.ndarray):
     # find an index corresponding to the maximum change across 0
     # f_d2_d2 : second derivative of f
     # f: the function
@@ -78,7 +80,9 @@ def find_max_change(f_d2_d2, f):
 _sig_axis_sum_order = {0: (1, -1), 1: (0, -1), 2: (0, 0)}
 
 
-def signature_array(phi, dim):
+def _signature_array(phi: np.ndarray, dim: int) -> np.ndarray:
+    # calculate the signature array for an image mask for the
+    # specified dimension
     if phi.ndim == 2:
         axid = 1 - dim  # axis to sum over
         sig_array = np.sum(phi, axis=axid)
@@ -91,51 +95,59 @@ def signature_array(phi, dim):
     return sig_array
 
 
-def find_grid_division_coord_1d(grid, phi, dim):
+def _find_grid_division_coord_1d(grid: GridBounds, phi: np.ndarray, dim: int) -> int:
+    # find the pixel index at which to split the grid for the present
+    # dimension
     if phi.shape[dim] < 10:
         return None
 
     # get signature array
-    sig = signature_array(phi, dim)
+    sig = _signature_array(phi, dim)
     # smooth it
-    filtered = lowpass_filter(sig)
+    filtered = _lowpass_filter(sig)
     # find second derivative
-    dx2d2 = dsig2_dpx2(filtered)
+    dx2d2 = _dsig2_dpx2(filtered)
     # identify location of max change across zero
-    coord = find_max_change(dx2d2, filtered)
+    coord = _find_max_change(dx2d2, filtered)
     # bump to global index
     coord = coord + grid.le[dim]
     return coord
 
 
-def find_grid_division_coord(phi, grid: GridBounds):
+def _find_grid_division_coord(phi: np.ndarray, grid: GridBounds) -> Tuple[int, ...]:
     phi_subset = _grid_subset(grid.le, grid.re, phi)
 
     grid_coords = []
     for grid_dim in range(grid.nd):
-        grid_coords.append(find_grid_division_coord_1d(grid, phi_subset, grid_dim))
+        grid_coords.append(_find_grid_division_coord_1d(grid, phi_subset, grid_dim))
 
     return tuple(grid_coords)
 
 
-def _grid_subset(le, re, phi):
+def _grid_subset(
+    le: Tuple[int, ...], re: Tuple[int, ...], phi: np.ndarray
+) -> np.ndarray:
     nd = len(le)
     slcs = tuple([slice(le[idim], re[idim]) for idim in range(nd)])
     phivals = phi[slcs]
     return phivals
 
 
-def grid_filled_fraction(le, re, phi):
+def _grid_filled_fraction(
+    le: Tuple[int, ...], re: Tuple[int, ...], phi: np.ndarray
+) -> float:
     grid_vals = _grid_subset(le, re, phi)
     return np.sum(grid_vals) / grid_vals.size
 
 
-def grid_contains_points(le, re, phi):
+def _grid_contains_points(
+    le: Tuple[int, ...], re: Tuple[int, ...], phi: np.ndarray
+) -> bool:
     phi_subset = _grid_subset(le, re, phi)
     return np.any(phi_subset > 0)
 
 
-def split_grid_at_coord(grid, coord, phi):
+def _split_grid_at_coord(grid: GridBounds, coord, phi: np.ndarray) -> List[GridBounds]:
     new_grids = []
     le = grid.le
     re = grid.re
@@ -165,16 +177,20 @@ def split_grid_at_coord(grid, coord, phi):
     for igrid in range(ixyz_le.shape[0]):
         le_i = tuple(ixyz_le[igrid])
         re_i = tuple(ixyz_re[igrid])
-        if grid_contains_points(le_i, re_i, phi):
+        if _grid_contains_points(le_i, re_i, phi):
             new_grids.append(GridBounds(le_i, re_i))
 
     return new_grids
 
 
 def decompose_image_mask_bisect(
-    phi: np.ndarray, max_iters=100, ideal_grid_fill=0.95, min_grid_size=10
-):
-    # always divides in 2, discards empty grids
+    phi: np.ndarray,
+    max_iters: int = 100,
+    ideal_grid_fill: float = 0.95,
+    min_grid_size: int = 10,
+) -> Tuple[List[GridBounds], int]:
+    # this decomposition divides each dimension in half, adding 2**nd new potential
+    # grids. If a new grid is empty, it is discarded.
 
     grids = []
     grids.append(GridBounds((0,) * phi.ndim, phi.shape))
@@ -184,7 +200,7 @@ def decompose_image_mask_bisect(
     n_iters = 0
 
     while keepgoing:
-        fill_frac = grid_filled_fraction(grids[igrid].le, grids[igrid].re, phi)
+        fill_frac = _grid_filled_fraction(grids[igrid].le, grids[igrid].re, phi)
         grid_size_checks = tuple(grids[igrid].size >= min_grid_size)
         if fill_frac < ideal_grid_fill and np.any(grid_size_checks):
             grid = grids[igrid]
@@ -193,7 +209,7 @@ def decompose_image_mask_bisect(
                 coords.append(int(grid.le[dim] + grid.size[dim] / 2))
             coords = tuple(coords)
 
-            new_grids = split_grid_at_coord(grids[igrid], coords, phi)
+            new_grids = _split_grid_at_coord(grids[igrid], coords, phi)
             if len(new_grids) > 0:
                 # remove divided grid
                 del grids[igrid]
@@ -214,8 +230,11 @@ def decompose_image_mask_bisect(
 
 
 def decompose_image_mask(
-    phi: np.ndarray, max_iters=100, ideal_grid_fill=0.9, min_grid_size=10
-):
+    phi: np.ndarray,
+    max_iters: int = 100,
+    ideal_grid_fill: float = 0.9,
+    min_grid_size: int = 10,
+) -> Tuple[List[GridBounds], int]:
     # following berger and rigoutsos 1991 (https://doi.org/10.1109/21.120081)
     # to take a binary image mask and construct grids that include the
     # non-zero pixels of the image mask.
@@ -232,11 +251,11 @@ def decompose_image_mask(
     n_iters = 0
 
     while keepgoing:
-        fill_frac = grid_filled_fraction(grids[igrid].le, grids[igrid].re, phi)
+        fill_frac = _grid_filled_fraction(grids[igrid].le, grids[igrid].re, phi)
         grid_size_checks = tuple(grids[igrid].size >= min_grid_size)
         if fill_frac < ideal_grid_fill and np.any(grid_size_checks):
-            coords = find_grid_division_coord(phi, grids[igrid])
-            new_grids = split_grid_at_coord(grids[igrid], coords, phi)
+            coords = _find_grid_division_coord(phi, grids[igrid])
+            new_grids = _split_grid_at_coord(grids[igrid], coords, phi)
             if len(new_grids) > 0:
                 # remove divided grid
                 del grids[igrid]

@@ -24,18 +24,18 @@ def test_create_image_mask():
 
 def test_signature_array():
     phi = np.ones((5, 3))
-    sig = _gd.signature_array(phi, 0)
+    sig = _gd._signature_array(phi, 0)
     assert np.all(sig == 3)
-    sig = _gd.signature_array(phi, 1)
+    sig = _gd._signature_array(phi, 1)
     assert np.all(sig == 5)
 
     phi = np.ones((5, 3, 2))
-    sig = _gd.signature_array(phi, 2)
+    sig = _gd._signature_array(phi, 2)
     assert np.all(sig == 15)
 
     with pytest.raises(NotImplementedError, match="Signature array only"):
         phi = np.ones((2,) * 4)
-        _ = _gd.signature_array(phi, 2)
+        _ = _gd._signature_array(phi, 2)
 
 
 def test_grid_bounds_plot():
