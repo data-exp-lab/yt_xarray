@@ -29,7 +29,7 @@ class Transformer(abc.ABC):
         a native or transformed coordinate name.
 
     the names of the coordinates will be expected as keyword arguments in the
-    `to_native` and `to_transformed` methods.
+    'to_native' and 'to_transformed' methods.
 
     """
 
@@ -125,7 +125,7 @@ class Transformer(abc.ABC):
 
         Parameters
         ----------
-        **coords:
+        coords:
             coordinate values in transformed coordinate system, provided as
             individual keyword arguments.
 
@@ -133,7 +133,7 @@ class Transformer(abc.ABC):
         -------
         tuple
             coordinate values in the native coordinate system, in order
-            of .native_coords attribute.
+            of the native_coords attribute.
 
         """
 
@@ -150,7 +150,7 @@ class Transformer(abc.ABC):
 
         Parameters
         ----------
-        **coords:
+        coords:
             coordinate values in native coordinate system, provided as
             individual keyword arguments.
 
@@ -158,7 +158,7 @@ class Transformer(abc.ABC):
         -------
         tuple
             coordinate values in the transformed coordinate system, in order
-            of .transformed_coords attribute.
+            of the transformed_coords attribute.
 
         """
 
