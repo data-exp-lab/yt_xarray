@@ -492,6 +492,11 @@ def build_interpolated_cartesian_ds(
         if refine_grid is True, max iterations for grid refinement (default 200)
     refine_min_grid_size:
         if refine_grid is True, minimum number of elements in refined grid (default 10)
+    refinement_method:
+        One of 'division' (the default) or 'signature_filter'. If 'division', refinement
+        will proceed by iterative bisection in each dimension. If 'signature_filter',
+        will use the image mask signature decomposition of Berger and Rigoutsos 1991
+        (https://doi.org/10.1109/21.120081).
     interp_method: str
         interpolation method: 'nearest' or 'interpolate'. Defaults to 'nearest'.
         If 'interpolate', will use linear nd interpolation.

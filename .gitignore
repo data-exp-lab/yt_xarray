@@ -107,3 +107,6 @@ ENV/
 
 # temp files
 *.swp
+
+# other configs
+imgui.ini
