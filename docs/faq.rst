@@ -1,10 +1,10 @@
-Some common problems (and how to solve them)
-============================================
+FAQ
+===
 
 yt and xarray have many similarities in how they handle their Datasets, but
 there are also many aspects that differ to varying degree. This page describes
 some of the difficulties you may encounter while using yt_xarray to communicate
-between the two.
+between the two and how to solve those issues.
 
 xarray datasets with a mix of dimensionality
 ********************************************
@@ -26,7 +26,9 @@ yt datasets have a fixed expectation for coordinate names. In cartesian, these
 coordinate names are ``'x'``, ``'y'``, ``'z'`` while for geographic coordinate systems
 the coordinate names are ``'latitude'``, ``'longtiude'`` and then either ``'altitude'``
 or ``'depth'``. To work with xarray variables defined with coordinate names that
-differ from these, yt_xarray provides some coordinate aliasing.
+differ from these, yt_xarray provides some coordinate aliasing, which in part relies
+on `cf_xarray <https://cf-xarray.readthedocs.io>`_ (if it is installed) for
+additional conversion to standard names.
 
 See :doc:`examples/example_002_coord_aliases` for an example.
 

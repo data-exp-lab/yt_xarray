@@ -1,3 +1,5 @@
+import builtins
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -533,6 +535,43 @@ def test_reversed_axis(stretched, use_callable, chunksizes):
     pdy_lats = slc._generate_container_field("pdy")
     assert np.all(pdy_lats > 0)
     assert np.all(np.isfinite(vals))
+
+
+def test_cf_xarray_disambiguation():
+    from cf_xarray.datasets import airds
+
+    # run the whole selection (will internally run coord disambiguation)
+    sel = xr2yt.Selection(
+        airds, fields=["air"], sel_dict={"time": 0}, sel_dict_type="isel"
+    )
+    xr_da = airds.air
+    selected_names = []
+    for c in sel.selected_coords:
+        selected_names.append(xr2yt._cf_xr_coord_disamb(c, xr_da)[0])
+
+    assert "latitude" in selected_names
+    assert "longitude" in selected_names
+
+
+def test_missing_cfxarray(monkeypatch):
+    from cf_xarray.datasets import airds
+
+    def _bad_import(name, globals=None, locals=None, fromlist=(), level=0):
+        raise ImportError
+
+    xr_da = airds.air
+    clist = list(xr_da.dims)
+    with monkeypatch.context() as m:
+        m.setattr(builtins, "__import__", _bad_import)
+        with pytest.raises(ValueError, match=f"{clist[0]} is not"):
+
+            _ = xr2yt._convert_to_yt_internal_coords(clist, xr_da)
+
+
+def test_coord_alias_reset():
+    xr2yt.known_coord_aliases["blah"] = "lwkerj"
+    xr2yt.reset_coordinate_aliases()
+    assert "blah" not in xr2yt.known_coord_aliases
 
 
 def test_reader_with_2d_space_time_and_reverse_axis():
