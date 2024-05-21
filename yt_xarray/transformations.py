@@ -15,7 +15,7 @@ EARTH_RADIUS = _earth_radius * 1.0
 
 class Transformer(abc.ABC):
     """
-    The transformer base class, meant to be subclassed, do not use directly.
+    The transformer base class, meant to be subclassed, do not instantiate directly.
 
     Parameters
     ----------
@@ -472,14 +472,8 @@ def build_interpolated_cartesian_ds(
         and the native coordinates of the dataset
     fields: tuple
         the fields to include
-    radial_type: str
-        one of 'radius', 'depth', 'altitude' to indicate type of radial axis.
     grid_resolution:
         the interpolated grid resolution, defaults to (64, 64, 64)
-    radial_axis: str
-        the name of the radial axis, will try to infer if not provided
-    r_o: float
-        the reference radius, defaults to the radius of the Earth
     fill_value: float
         Optional value to use for filling grid values that fall outside
         the original data. Defaults to np.nan, but for volume rendering
@@ -493,18 +487,19 @@ def build_interpolated_cartesian_ds(
     refine_min_grid_size:
         if refine_grid is True, minimum number of elements in refined grid (default 10)
     refinement_method:
-        One of 'division' (the default) or 'signature_filter'. If 'division', refinement
-        will proceed by iterative bisection in each dimension. If 'signature_filter',
-        will use the image mask signature decomposition of Berger and Rigoutsos 1991
-        (https://doi.org/10.1109/21.120081).
+        One of ``'division'`` (the default) or ``'signature_filter'``. If ``'division'``,
+        refinement will proceed by iterative bisection in each dimension. If
+        ``'signature_filter'``, will use the image mask signature decomposition
+        of Berger and Rigoutsos 1991 (https://doi.org/10.1109/21.120081).
     interp_method: str
-        interpolation method: 'nearest' or 'interpolate'. Defaults to 'nearest'.
-        If 'interpolate', will use linear nd interpolation.
+        interpolation method: ``'nearest'`` or ``'interpolate'``. Defaults to ``'nearest'``.
+        If ``'interpolate'``, will use linear nd interpolation.
     interp_func: Callable
-        a custom interpolation function, method is ignored. The function will
-        be called with interp_func(data=data_array, coords=eval_coords), where
-        data_array is an xarray data array and eval_coords is a list of 1d
-        np.ndarray ordered by the data_array.dims
+        a custom interpolation function. Will over-ride `interp_method`. The function
+        will be called with ``interp_func(data=data_array, coords=eval_coords)``, where
+        ``data_array`` is an xarray ``DataArray`` and ``eval_coords`` is a list of 1d
+        np.ndarray ordered by the transformer native coordinate order and should
+        return an np.ndarray of the same shape as the ``eval_coords``
 
 
     Returns
@@ -597,7 +592,9 @@ def build_interpolated_cartesian_ds(
                         native_coords[idim].ravel()[mask], dims="points"
                     )
                 if interp_method == "interpolate":
-                    vals = data.interp(kwargs=dict(fill_value=np.nan), **interp_dict)
+                    vals = data.interp(
+                        kwargs=dict(fill_value=fill_value), **interp_dict
+                    )
                 elif interp_method == "nearest":
                     vals = data.sel(interp_dict, method="nearest")
 
