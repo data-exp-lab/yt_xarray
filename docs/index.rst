@@ -18,12 +18,11 @@ If you come across any issues or have feature requests, please reach out at the
 
 .. toctree::
    :hidden:
-   :maxdepth: 2
 
    installation
    supported_grids
    examples
    faq
-   API <modules>
+   API <source/modules>
    contributing
 

@@ -55,7 +55,7 @@ class YtAccessor:
 
         use_callable : bool
             if True (default), then the yt dataset will utilize links to the open
-            xarray Dataset handle to avoid copying memory.
+            xarray Dataset handle to avoid copying data.
 
         sel_dict: dict
             an optional selection dictionary to apply to the fields before yt dataset
@@ -235,8 +235,8 @@ class YtAccessor:
 
     def SlicePlot(self, normal, field, **im_kwargs):
         """
-        Wrapper of `yt.SlicePlot`. For off-axis plots, first construct a
-        yt dataset object with `ds.yt.load_grid` and then use `yt.SlicePlot`
+        Wrapper of ``yt.SlicePlot``. For off-axis plots, first construct a
+        yt dataset object with ``ds.yt.load_grid`` and then use ``yt.SlicePlot``
 
         Parameters
         ----------
@@ -244,8 +244,8 @@ class YtAccessor:
             The normal to the slice.
         field: str
             The field to plot
-        **im_kwargs
-            any of the keyword arguments accepted by yt.SlicePlot
+        im_kwargs
+            any additional keyword arguments accepted by ``yt.SlicePlot``
 
         Returns
         -------
@@ -255,8 +255,8 @@ class YtAccessor:
 
     def ProjectionPlot(self, normal, field, **im_kwargs):
         """
-        Wrapper of `yt.ProjectionPlot`. For off-axis plots, first construct a
-        yt dataset object with `ds.yt.load_grid` and then use `yt.ProjectionPlot`
+        Wrapper of ``yt.ProjectionPlot``. For off-axis plots, first construct a
+        yt dataset object with ``ds.yt.load_grid`` and then use ``yt.ProjectionPlot``
 
         Parameters
         ----------
@@ -264,8 +264,8 @@ class YtAccessor:
             The normal to the slice.
         field: str
             The field to plot
-        **im_kwargs
-            any of the keyword arguments accepted by yt.ProjectionPlot
+        im_kwargs
+            any of the keyword arguments accepted by ``yt.ProjectionPlot``
 
         Returns
         -------

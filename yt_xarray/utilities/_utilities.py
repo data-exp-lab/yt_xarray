@@ -1,3 +1,4 @@
+import importlib
 import os.path
 from typing import List, Optional, Tuple
 
@@ -199,3 +200,19 @@ def _validate_file(function):
         return function(goodfile, *args, **kwargs)
 
     return validate_then_call
+
+
+def _import_optional_dep(
+    name: str, package: Optional[str] = None, custom_message: Optional[str] = None
+):
+    # wrapper of importlib.import_module
+    # name, package get sent to importlib.import_module
+    # custom_message will overwrite the ImportError message if the package is not
+    # found.
+    try:
+        return importlib.import_module(name, package=package)
+    except ImportError:
+        msg = custom_message
+        if msg is None:
+            msg = f"This functionality requires {name}. Install it and try again."
+        raise ImportError(msg)
