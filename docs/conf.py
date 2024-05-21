@@ -102,6 +102,8 @@ html_theme_options = {
     "github_button": True,
     "github_user": "data-exp-lab",
     "github_repo": "yt_xarray",
+    "github_count": False,
+    "github_type": "no-text",
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,
