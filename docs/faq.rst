@@ -1,10 +1,10 @@
-Some common problems (and how to solve them)
-============================================
+FAQ
+===
 
 yt and xarray have many similarities in how they handle their Datasets, but
 there are also many aspects that differ to varying degree. This page describes
 some of the difficulties you may encounter while using yt_xarray to communicate
-between the two.
+between the two and how to solve those issues.
 
 xarray datasets with a mix of dimensionality
 ********************************************
