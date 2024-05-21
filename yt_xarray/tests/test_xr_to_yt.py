@@ -573,7 +573,7 @@ def test_coord_alias_reset():
     xr2yt.reset_coordinate_aliases()
     assert "blah" not in xr2yt.known_coord_aliases
 
-    
+
 def test_reader_with_2d_space_time_and_reverse_axis():
 
     # test for https://github.com/data-exp-lab/yt_xarray/issues/86
@@ -594,4 +594,3 @@ def test_reader_with_2d_space_time_and_reverse_axis():
     )
     slc = yt.SlicePlot(ds_yt, "altitude", field)
     assert np.all(np.isfinite(slc.frb[field]))
-
