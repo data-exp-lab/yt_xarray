@@ -29,7 +29,7 @@ dependencies=['yt>=4.2.0', 'h5py>=3.4.0', 'pooch>=1.5.1', 'xarray']
 
 [project.optional-dependencies]
 full = ["netCDF4", "scipy", "dask[complete]", "cf_xarray"]
-test = ["pytest", "pytest-cov"]
+test = ["pytest", "pytest-cov", "cartopy"]
 docs = ["Sphinx==7.2.6", "jinja2==3.1.2", "nbsphinx==0.9.3"]
 
 [tool.black]

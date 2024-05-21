@@ -38,7 +38,7 @@ extensions = [
     "sphinx.ext.autosectionlabel",
     "nbsphinx",
 ]
-
+suppress_warnings = ["autosectionlabel.*"]
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
 
@@ -53,7 +53,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "yt_xarray"
-copyright = "2022, Chris Havlin"
+copyright = "2024, Chris Havlin"
 author = "Chris Havlin"
 
 # The version info for the project you're documenting, acts as replacement
@@ -70,7 +70,9 @@ release = yt_xarray.__version__
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = "en"
+
+toc_object_entries_show_parents = "hide"
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -95,7 +97,14 @@ html_theme = "alabaster"
 # theme further.  For a list of options available for each theme, see the
 # documentation.
 #
-# html_theme_options = {}
+html_theme_options = {
+    "fixed_sidebar": True,
+    "github_button": True,
+    "github_user": "data-exp-lab",
+    "github_repo": "yt_xarray",
+    "github_count": False,
+    "github_type": "no-text",
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

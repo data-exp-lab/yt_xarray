@@ -4,6 +4,7 @@ from typing import List, Optional, Union
 import numpy as np
 import xarray as xr
 import yt
+from numpy.typing import ArrayLike
 from unyt import unyt_quantity
 
 from yt_xarray.accessor import _xr_to_yt
@@ -37,7 +38,7 @@ class YtAccessor:
         use_callable: bool = True,
         sel_dict: Optional[dict] = None,
         sel_dict_type: Optional[str] = "isel",
-        chunksizes: Optional[int] = None,
+        chunksizes: Optional[Union[int, ArrayLike]] = None,
         **kwargs,
     ):
         """
@@ -54,7 +55,7 @@ class YtAccessor:
 
         use_callable : bool
             if True (default), then the yt dataset will utilize links to the open
-            xarray Dataset handle to avoid copying memory.
+            xarray Dataset handle to avoid copying data.
 
         sel_dict: dict
             an optional selection dictionary to apply to the fields before yt dataset
@@ -63,6 +64,11 @@ class YtAccessor:
         sel_dict_type: str
             either "isel" (default) or "sel" to indicate index or value selection for
             sel_dict.
+
+        chunksizes: int or ArrayLike
+            if set, will decompose the grid into multiple grids with grid dimensions
+            of chunksizes. Can be a single integer (same chunksize in each dimensions)
+            or an ArrayLike object of the same length as the number of dimensions.
 
         kwargs :
             any additional keyword arguments to pass to yt.load_uniform_grid
@@ -229,8 +235,8 @@ class YtAccessor:
 
     def SlicePlot(self, normal, field, **im_kwargs):
         """
-        Wrapper of `yt.SlicePlot`. For off-axis plots, first construct a
-        yt dataset object with `ds.yt.load_grid` and then use `yt.SlicePlot`
+        Wrapper of ``yt.SlicePlot``. For off-axis plots, first construct a
+        yt dataset object with ``ds.yt.load_grid`` and then use ``yt.SlicePlot``
 
         Parameters
         ----------
@@ -238,8 +244,8 @@ class YtAccessor:
             The normal to the slice.
         field: str
             The field to plot
-        **im_kwargs
-            any of the keyword arguments accepted by yt.SlicePlot
+        im_kwargs
+            any additional keyword arguments accepted by ``yt.SlicePlot``
 
         Returns
         -------
@@ -249,8 +255,8 @@ class YtAccessor:
 
     def ProjectionPlot(self, normal, field, **im_kwargs):
         """
-        Wrapper of `yt.ProjectionPlot`. For off-axis plots, first construct a
-        yt dataset object with `ds.yt.load_grid` and then use `yt.ProjectionPlot`
+        Wrapper of ``yt.ProjectionPlot``. For off-axis plots, first construct a
+        yt dataset object with ``ds.yt.load_grid`` and then use ``yt.ProjectionPlot``
 
         Parameters
         ----------
@@ -258,8 +264,8 @@ class YtAccessor:
             The normal to the slice.
         field: str
             The field to plot
-        **im_kwargs
-            any of the keyword arguments accepted by yt.ProjectionPlot
+        im_kwargs
+            any of the keyword arguments accepted by ``yt.ProjectionPlot``
 
         Returns
         -------

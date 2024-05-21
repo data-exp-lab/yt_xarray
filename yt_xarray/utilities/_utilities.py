@@ -1,5 +1,6 @@
+import importlib
 import os.path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import xarray as xr
@@ -111,7 +112,7 @@ def _test_time_coord(nt=5):
 
 def _get_test_coord(
     cname, n, minv: Optional[float] = None, maxv: Optional[float] = None
-):
+) -> np.ndarray:
     if cname in known_coord_aliases:
         cname = known_coord_aliases[cname]
 
@@ -140,7 +141,13 @@ def _get_test_coord(
     return np.linspace(minv, maxv, n)
 
 
-def construct_ds_with_extra_dim(icoord: int, dim_name: str = "time"):
+def construct_ds_with_extra_dim(
+    icoord: int,
+    dim_name: str = "time",
+    ncoords: Optional[int] = None,
+    nd_space: int = 3,
+    reverse_indices: Optional[List[int]] = None,
+):
     coord_configs = {
         0: (dim_name, "x", "y", "z"),
         1: (dim_name, "z", "y", "x"),
@@ -150,11 +157,22 @@ def construct_ds_with_extra_dim(icoord: int, dim_name: str = "time"):
     }
 
     data_vars = {}
-    coords = {c: _get_test_coord(c, icoord + 4) for c in coord_configs[icoord]}
+    if ncoords is None:
+        ncoords = icoord + 4
+
+    full_dims = coord_configs[icoord]
+    dim_order = [full_dims[idim] for idim in range(nd_space + 1)]
+    coords = {c: _get_test_coord(c, ncoords) for c in dim_order}
+
+    if reverse_indices is not None:
+        for indx in reverse_indices:
+            dim = dim_order[indx]
+            coords[dim] = coords[dim][::-1]
+
     var_shape = tuple([len(c) for c in coords.values()])
     vals = np.random.random(var_shape)
     fname = f"test_case_{icoord}"
-    da = xr.DataArray(vals, coords=coords, dims=coord_configs[icoord])
+    da = xr.DataArray(vals, coords=coords, dims=dim_order)
     data_vars[fname] = da
 
     return xr.Dataset(data_vars=data_vars)
@@ -182,3 +200,19 @@ def _validate_file(function):
         return function(goodfile, *args, **kwargs)
 
     return validate_then_call
+
+
+def _import_optional_dep(
+    name: str, package: Optional[str] = None, custom_message: Optional[str] = None
+):
+    # wrapper of importlib.import_module
+    # name, package get sent to importlib.import_module
+    # custom_message will overwrite the ImportError message if the package is not
+    # found.
+    try:
+        return importlib.import_module(name, package=package)
+    except ImportError:
+        msg = custom_message
+        if msg is None:
+            msg = f"This functionality requires {name}. Install it and try again."
+        raise ImportError(msg)
