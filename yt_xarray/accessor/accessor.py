@@ -54,7 +54,7 @@ class YtAccessor:
 
         use_callable : bool
             if True (default), then the yt dataset will utilize links to the open
-            xarray Dataset handle to avoid copying memory.
+            xarray Dataset handle to avoid copying data.
 
         sel_dict: dict
             an optional selection dictionary to apply to the fields before yt dataset
