@@ -426,6 +426,16 @@ def _get_yt_ds(
 class ChunkInfo:
     """
     Class for tracking info related to chunked-decomposition of a domain
+
+    Parameters
+    ----------
+    data_shp: Tuple[int,]
+        the global shape of the data to chunk
+    chunksizes: np.ndarray[int]
+        the chunksizes in each dimension of data_shp
+    starting_index_offset: np.ndarray[int]
+        global index offset. start and end indices will be offset
+        by this array. Defaults to [0,0,0].
     """
 
     def __init__(
@@ -449,17 +459,27 @@ class ChunkInfo:
 
     _si: List[np.ndarray] = None
     _ei: List[np.ndarray] = None
+    _sizes: List[np.ndarray] = None
 
     @property
     def si(self) -> List[np.ndarray]:
+        """
+        The starting indices of individual chunks by dimension.
+        Includes any global offset.
+        """
         if self._si is None:
             si_list = []
             ei_list = []
+            size_list = []
             for idim in range(self.ndim):
+
+                # first get the starting and end points of whole chunks
                 si0 = self.starting_index_offset[idim]
                 si_0 = si0 + self.chunksizes[idim] * np.arange(self.n_whl_chnk[idim])
                 ei_0 = si_0 + self.chunksizes[idim]
 
+                # if this dim has a partial chunk at the end, add on a
+                # partial chunk.
                 if self.n_part_chnk[idim] == 1:
                     si_0_partial = ei_0[-1]
                     ei_0_partial = self.data_shape[idim] - si_0_partial
@@ -481,13 +501,35 @@ class ChunkInfo:
                     )
                 si_list.append(si_0)
                 ei_list.append(ei_0)
+                size_list.append(ei_0 - si_0)
             self._si = si_list
             self._ei = ei_list
+            self._sizes = size_list
         return self._si
 
     @property
     def ei(self) -> List[np.ndarray]:
+        """
+        The ending indices of individual chunks by dimension.
+        Includes any global offset.
+        """
         if self._ei is None:
             _ = self.si
             assert self._ei is not None
         return self._ei
+
+    @property
+    def sizes(self) -> List[np.ndarray]:
+        if self._sizes is None:
+            _ = self.si
+            assert self._sizes is not None
+        return self._sizes
+
+    def meshgrid_sizes(self, indexing: str = "ij") -> np.ndarray:
+        return np.meshgrid(*self.sizes, indexing=indexing)
+
+    def meshgrid_start(self, indexing: str = "ij") -> np.ndarray:
+        return np.meshgrid(*self.si, indexing=indexing)
+
+    def meshgrid_end(self, indexing: str = "ij") -> np.ndarray:
+        return np.meshgrid(*self.ei, indexing=indexing)

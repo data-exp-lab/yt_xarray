@@ -584,7 +584,7 @@ def _load_chunked_grid(
             le_0 = np.concatenate([[min_val], re_0[:-1]])
 
         # sizes also already account for interp_required
-        subgrid_size = ei_0 - si_0
+        subgrid_size = chnkinfo.sizes[idim]
 
         left_edges.append(le_0)
         right_edges.append(re_0)

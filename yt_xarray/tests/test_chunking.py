@@ -6,6 +6,7 @@ from dask import array as da
 
 import yt_xarray  # noqa: F401
 from yt_xarray import sample_data
+from yt_xarray.utilities._grid_decomposition import ChunkInfo
 from yt_xarray.utilities._utilities import construct_minimal_ds
 
 
@@ -146,3 +147,18 @@ def test_chunk_bad_length():
 
     with pytest.raises(ValueError, match="The number of elements in "):
         _ = ds.yt.load_grid(length_unit="km", chunksizes=(30, 40, 20, 5))
+
+
+_chunk_tests = [
+    ((20, 30, 40), (10, 15, 20), (0,) * 3, (2, 2, 2)),
+    ((20, 30, 40), (15, 15, 20), (0,) * 3, (2, 2, 2)),
+]
+
+
+@pytest.mark.parametrize("data_shape,chunksizes,si0, expected_nchunks", _chunk_tests)
+def test_chunk_info(data_shape, chunksizes, si0, expected_nchunks):
+    chunksizes = np.array(chunksizes, dtype="int")
+    si0 = np.array(si0, dtype="int")
+    ch = ChunkInfo(data_shape, chunksizes, starting_index_offset=si0)
+    chunks = ch.n_whl_chnk + ch.n_part_chnk
+    assert np.all(chunks == np.asarray(expected_nchunks))
