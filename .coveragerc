@@ -1,6 +1,6 @@
 [run]
 source = yt_xarray
-omit = 
+omit =
     setup.py
 
 [report]
