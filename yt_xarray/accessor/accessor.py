@@ -10,6 +10,7 @@ from unyt import unyt_quantity
 from yt_xarray.accessor import _xr_to_yt
 from yt_xarray.accessor._readers import _get_xarray_reader
 from yt_xarray.accessor._xr_to_yt import _load_full_field_from_xr
+from yt_xarray.utilities._grid_decomposition import ChunkInfo
 from yt_xarray.utilities.logging import ytxr_log
 
 
@@ -535,17 +536,13 @@ def _load_chunked_grid(
     # otherwise it is number of nodes (which are treated as new cell centers).
     # the bbox will already account for this as well.
 
-    # do some grid/chunk counting
-    n_chnk = np.asarray(data_shp) / chunksizes  # may not be int
-    n_whl_chnk = np.floor(n_chnk).astype(int)  # whole chunks in each dim
-    n_part_chnk = np.ceil(n_chnk - n_whl_chnk).astype(int)  # partial chunks
-
-    n_tots = np.prod(n_part_chnk + n_whl_chnk)
-    ytxr_log.info(f"Constructing a yt chunked grid with {n_tots} chunks.")
-
     # initialize the global starting index
     si = np.array([0, 0, 0], dtype=int)
     si = sel_info.starting_indices + si
+
+    # do some grid/chunk counting
+    chnkinfo = ChunkInfo(data_shp, chunksizes, starting_index_offset=si)
+    ytxr_log.info(f"Constructing a yt chunked grid with {chnkinfo.n_tots} chunks.")
 
     # select field for grabbing coordinate arrays -- fields should all be
     # verified by now
@@ -564,29 +561,8 @@ def _load_chunked_grid(
     subgrid_start = []
     subgrid_end = []
     for idim in range(sel_info.ndims):
-        si_0 = si[idim] + chunksizes[idim] * np.arange(n_whl_chnk[idim])
-        ei_0 = si_0 + chunksizes[idim]
-
-        if n_part_chnk[idim] == 1:
-            si_0_partial = ei_0[-1]
-            ei_0_partial = data_shp[idim] - si_0_partial
-            si_0 = np.concatenate(
-                [
-                    si_0,
-                    [
-                        si_0_partial,
-                    ],
-                ]
-            )
-            ei_0 = np.concatenate(
-                [
-                    ei_0,
-                    [
-                        ei_0[-1] + ei_0_partial,
-                    ],
-                ]
-            )
-
+        si_0 = chnkinfo.si[idim]
+        ei_0 = chnkinfo.ei[idim]
         c = cnames[idim]
         rev_ax = sel_info.reverse_axis[idim]
         if rev_ax is False:
@@ -608,7 +584,7 @@ def _load_chunked_grid(
             le_0 = np.concatenate([[min_val], re_0[:-1]])
 
         # sizes also already account for interp_required
-        subgrid_size = ei_0 - si_0
+        subgrid_size = chnkinfo.sizes[idim]
 
         left_edges.append(le_0)
         right_edges.append(re_0)

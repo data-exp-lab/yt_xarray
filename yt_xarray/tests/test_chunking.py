@@ -6,6 +6,7 @@ from dask import array as da
 
 import yt_xarray  # noqa: F401
 from yt_xarray import sample_data
+from yt_xarray.utilities._grid_decomposition import ChunkInfo
 from yt_xarray.utilities._utilities import construct_minimal_ds
 
 
@@ -146,3 +147,41 @@ def test_chunk_bad_length():
 
     with pytest.raises(ValueError, match="The number of elements in "):
         _ = ds.yt.load_grid(length_unit="km", chunksizes=(30, 40, 20, 5))
+
+
+_chunk_tests = [
+    ((20, 30, 40), (10, 15, 20), (0,) * 3, (2, 2, 2)),
+    ((20, 30, 40), (15, 15, 20), (0,) * 3, (2, 2, 2)),
+    ((10, 15, 20), (5, 5, 5), None, (2, 3, 4)),
+    ((10, 15, 20), (5, 5, 5), (1, 2, 3), (2, 3, 4)),
+]
+
+
+@pytest.mark.parametrize("data_shape,chunksizes,si0, expected_nchunks", _chunk_tests)
+def test_chunk_info(data_shape, chunksizes, si0, expected_nchunks):
+    chunksizes = np.array(chunksizes, dtype="int")
+    if si0 is not None:
+        si0 = np.array(si0, dtype="int")
+    ch = ChunkInfo(data_shape, chunksizes, starting_index_offset=si0)
+    chunks = ch.n_whl_chnk + ch.n_part_chnk
+    assert np.all(chunks == np.asarray(expected_nchunks))
+    if si0 is not None:
+        si = np.array([ch.si[id][0] for id in range(3)])
+        assert np.all(si == si0)
+
+
+def test_chunk_info_caching():
+
+    chunksizes = np.array([5, 5, 5], dtype="int")
+    data_shape = (10, 15, 20)
+
+    def _get_ch():
+        return ChunkInfo(data_shape, chunksizes)
+
+    ch = _get_ch()
+    _ = ch.ei
+    ch = _get_ch()
+    _ = ch.sizes
+    assert ch._sizes is not None
+    assert ch._si is not None
+    assert ch._ei is not None
