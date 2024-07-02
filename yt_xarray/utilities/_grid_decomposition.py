@@ -454,7 +454,7 @@ class ChunkInfo:
 
         self.ndim = len(data_shp)
         if starting_index_offset is None:
-            starting_index_offset = np.zeros(data_shp.shape, dtype=int)
+            starting_index_offset = np.zeros(self.data_shape.shape, dtype=int)
         self.starting_index_offset = starting_index_offset
 
     _si: List[np.ndarray] = None
@@ -524,12 +524,3 @@ class ChunkInfo:
             _ = self.si
             assert self._sizes is not None
         return self._sizes
-
-    def meshgrid_sizes(self, indexing: str = "ij") -> np.ndarray:
-        return np.meshgrid(*self.sizes, indexing=indexing)
-
-    def meshgrid_start(self, indexing: str = "ij") -> np.ndarray:
-        return np.meshgrid(*self.si, indexing=indexing)
-
-    def meshgrid_end(self, indexing: str = "ij") -> np.ndarray:
-        return np.meshgrid(*self.ei, indexing=indexing)
