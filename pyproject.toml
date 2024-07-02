@@ -4,7 +4,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yt_xarray"
-version = "0.3.0"
 authors = [
   { name="Chris Havlin", email="chris.havlin@gmail.com" },
 ]
@@ -22,6 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies=['yt>=4.2.0', 'h5py>=3.4.0', 'pooch>=1.5.1', 'xarray']
+dynamic = ["version"]
 
 [project.urls]
 "Homepage" = "https://github.com/data-exp-lab/yt_xarray"
@@ -40,3 +40,6 @@ target-version = ['py310']
 profile = "black"
 combine_as_imports = true
 skip =  ["venv", "benchmarks"]
+
+[tool.setuptools.dynamic]
+version = {attr = "yt_xarray.__version__"}
