@@ -22,10 +22,11 @@ jobs:
         python -m pip install --upgrade pip
         python -m pip install -e .[full,test]
     - name: Run Tests
-      run: pytest --cov=./ --cov-report=xml:coverage/coverage.xml
+      run: pytest --cov=./ --cov-report=html
 
-    # https://github.com/marketplace/actions/codecov#example-workflowyml-with-codecov-action
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+    - name: Upload coverage report
+      if: (matrix.platform == 'ubuntu-latest' && matrix.python-version == '3.11')
+      uses: actions/upload-artifact@v4
       with:
-        directory: ./coverage/
+          name: coverage-report
+          path: htmlcov/*
