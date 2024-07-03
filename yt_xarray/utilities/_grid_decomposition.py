@@ -1,7 +1,6 @@
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
-from scipy.signal import butter, filtfilt
 from yt import load_amr_grids
 
 from yt_xarray.transformations import Transformer
@@ -19,11 +18,14 @@ def _dsig2_dpx2(sig1d):
 def _lowpass_filter(sig_1d):
     # pass a signature array through a lowpass filter. should expose some of these
     # for when a grid is not properly decomposing...
+    msg = "This functionality requires scipy. Install it and try again."
+    scp_signal = _import_optional_dep("scipy.signal", custom_message=msg)
+
     order = 2  # keep at 2
     fs = 1.0  # sampling frequency [Hz]
     Wn = 0.1  # critical frequency [Hz]
-    b, a = butter(order, Wn=Wn, fs=fs, btype="low", analog=False)
-    y = filtfilt(b, a, sig_1d)
+    b, a = scp_signal.butter(order, Wn=Wn, fs=fs, btype="low", analog=False)
+    y = scp_signal.filtfilt(b, a, sig_1d)
     return y
 
 
