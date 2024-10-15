@@ -537,7 +537,22 @@ def test_reversed_axis(stretched, use_callable, chunksizes):
     assert np.all(np.isfinite(vals))
 
 
+def _invalid_nc4_windows():
+    import sys
+
+    import netCDF4
+
+    nc4_v = netCDF4.__version__
+    return "1.7.1" in nc4_v and sys.platform.startswith("win")
+
+
 def test_cf_xarray_disambiguation():
+
+    if _invalid_nc4_windows():
+        # https://github.com/Unidata/netcdf4-python/issues/1373
+        # https://github.com/data-exp-lab/yt_xarray/pull/99
+        pytest.skip("Known nc4, windows endian issue.")
+
     airds = xr.tutorial.open_dataset("air_temperature")
     # run the whole selection (will internally run coord disambiguation)
     sel = xr2yt.Selection(
@@ -553,6 +568,11 @@ def test_cf_xarray_disambiguation():
 
 
 def test_missing_cfxarray(monkeypatch):
+    if _invalid_nc4_windows():
+        # https://github.com/Unidata/netcdf4-python/issues/1373
+        # https://github.com/data-exp-lab/yt_xarray/pull/99
+        pytest.skip("Known nc4, windows endian issue.")
+
     airds = xr.tutorial.open_dataset("air_temperature")
 
     def _bad_import(name, globals=None, locals=None, fromlist=(), level=0):
