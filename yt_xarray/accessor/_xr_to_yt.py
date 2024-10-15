@@ -1,11 +1,12 @@
 import collections.abc
 import enum
 from collections import defaultdict
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 import unyt
 import xarray as xr
+from numpy import typing as npt
 
 from yt_xarray.utilities.logging import ytxr_log
 
@@ -29,12 +30,12 @@ class Selection:
     def __init__(
         self,
         xr_ds,
-        fields: List[str] = None,
-        sel_dict: Optional[dict] = None,
-        sel_dict_type: Optional[str] = "isel",
+        fields: List[str] | None = None,
+        sel_dict: dict[str, Any] | None = None,
+        sel_dict_type: str | None = "isel",
     ):
         self.fields = self._validate_fields(xr_ds, fields)
-        self.units: dict = self._find_units(xr_ds)
+        self.units: dict[str, str] = self._find_units(xr_ds)
         self.full_shape = xr_ds.data_vars[self.fields[0]].shape
         self.sel_dict = sel_dict or {}
         if sel_dict_type not in ["sel", "isel"]:
@@ -44,26 +45,26 @@ class Selection:
         self.sel_dict_type = sel_dict_type
 
         # all these attributes are set in _process_selection
-        self.selected_shape: Tuple[int] = None
+        self.selected_shape: Tuple[int] | None = None
         self.full_bbox = None
-        self.selected_bbox = None
-        self.full_coords: Tuple[str] = None
-        self.selected_coords: Tuple[str] = None
-        self.starting_indices: np.ndarray = None
-        self.selected_time = None
-        self.ndims: int = None
-        self.grid_type = None  # one of _GridType members
-        self.cell_widths: list = None
-        self.global_dims: list = None
-        self.time_index_number: int = None
+        self.selected_bbox: npt.NDArray
+        self.full_coords: Tuple[str]
+        self.selected_coords: Tuple[str]
+        self.starting_indices: npt.NDArray
+        self.selected_time: float | None = None
+        self.ndims: int | None = None
+        self.grid_type: _GridType
+        self.cell_widths: list[Any]
+        self.global_dims: list[Any]
+        self.time_index_number: int | None = None
         self._process_selection(xr_ds)
 
-        xr_field = xr_ds.data_vars[fields[0]]
+        xr_field = xr_ds.data_vars[self.fields[0]]
         self.yt_coord_names = _convert_to_yt_internal_coords(
             self.selected_coords, xr_field
         )
 
-    def _find_units(self, xr_ds) -> dict:
+    def _find_units(self, xr_ds) -> dict[str, str]:
         units = {}
         for field in self.fields:
             unit = getattr(xr_ds[field], "units", "")
@@ -117,7 +118,7 @@ class Selection:
 
         return si
 
-    def _process_selection(self, xr_ds):
+    def _process_selection(self, xr_ds: xr.Dataset):
         # the full list of coordinates (in order)
         full_coords = list(xr_ds.data_vars[self.fields[0]].dims)
         time = 0.0
@@ -230,7 +231,7 @@ class Selection:
             "level": 0,
         }
 
-    def _validate_fields(self, xr_ds, fields: List[str]) -> List[str]:
+    def _validate_fields(self, xr_ds, fields: List[str] | None) -> List[str]:
         if fields is None:
             raise ValueError("Please provide a list of fields")
 
@@ -261,7 +262,7 @@ class Selection:
             )
         return fields
 
-    def select_from_xr(self, xr_ds, field):
+    def select_from_xr(self, xr_ds: xr.Dataset, field: str) -> xr.DataArray:
         if self.sel_dict_type == "isel":
             vars = xr_ds[field].isel(self.sel_dict)
         else:
@@ -358,20 +359,20 @@ def reset_coordinate_aliases():
 
 
 _expected_yt_axes = {
-    "cartesian": set(["x", "y", "z"]),
-    "spherical": set(["r", "phi", "theta"]),
-    "geographic": set(["altitude", "latitude", "longitude"]),
-    "internal_geographic": set(["depth", "latitude", "longitude"]),
+    "cartesian": {"x", "y", "z"},
+    "spherical": {"r", "phi", "theta"},
+    "geographic": {"altitude", "latitude", "longitude"},
+    "internal_geographic": {"depth", "latitude", "longitude"},
 }
 
 valid_geometries = tuple(_expected_yt_axes.keys()) + ("geodetic",)
 
-_yt_coord_names = []
-for vals in _expected_yt_axes.values():
-    _yt_coord_names += list(vals)
+_yt_coord_names: set[str] = set()
+for ky in _expected_yt_axes.keys():
+    _yt_coord_names.update(_expected_yt_axes[ky])
 
 
-def _invert_cf_standard_names(standard_names: dict):
+def _invert_cf_standard_names(standard_names: dict[str, str]):
     inverted_mapping = defaultdict(lambda: set())
     for ky, vals in standard_names.items():
         for val in vals:
@@ -398,11 +399,12 @@ def _cf_xr_coord_disamb(
     return None, True
 
 
-def _convert_to_yt_internal_coords(coord_list: List[str], xr_field: xr.DataArray):
+def _convert_to_yt_internal_coords(coord_list: tuple[str], xr_field: xr.DataArray):
     yt_coords = []
     for c in coord_list:
         cname = c.lower()
         cf_xarray_exists = None
+        valid_coord_name: str | None
         if cname in known_coord_aliases:
             valid_coord_name = known_coord_aliases[cname]
         elif cname in _yt_coord_names:
@@ -424,7 +426,7 @@ def _convert_to_yt_internal_coords(coord_list: List[str], xr_field: xr.DataArray
     return yt_coords
 
 
-def _determine_yt_geomtype(coord_type: str, coord_list: List[str]) -> Optional[str]:
+def _determine_yt_geomtype(coord_type: str, coord_list: list[str]) -> str:
     # mainly for expanding geodetic into internal_geographic or geographic as used
     # by yt
     if coord_type == "geodetic":
@@ -436,11 +438,10 @@ def _determine_yt_geomtype(coord_type: str, coord_list: List[str]) -> Optional[s
             return "geographic"
     elif coord_type in _expected_yt_axes.keys():
         return coord_type
-    else:
-        raise ValueError(f"Unsupported geometry type: {coord_type}")
+    raise ValueError(f"Unsupported geometry type: {coord_type}")
 
 
-def _add_3rd_axis_name(yt_geometry: str, axis_order: list) -> list:
+def _add_3rd_axis_name(yt_geometry: str, axis_order: list[str]) -> list[str]:
     if len(axis_order) != 2:
         raise RuntimeError("This function should only be called for 2d data.")
 
@@ -459,9 +460,9 @@ def _add_3rd_axis_name(yt_geometry: str, axis_order: list) -> list:
     raise RuntimeError("Could not determine missing coordinate.")
 
 
-def _size_of_array_like(v):
+def _size_of_array_like(v: npt.ArrayLike) -> int:
     if isinstance(v, (np.ndarray, xr.DataArray)):
-        return v.size
+        return int(v.size)
 
     return len(v)
 
@@ -478,7 +479,7 @@ class _GridType(enum.Flag):
     UNKNOWN = enum.auto()
 
 
-def _check_grid_stretchiness(x):
+def _check_grid_stretchiness(x: npt.NDArray) -> _GridType:
     dx = np.unique(x[1:] - x[:-1])
     grid_tol = 1e-10  # could be a user setting
     if np.allclose(dx, [dx[0]], grid_tol):
