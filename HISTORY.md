@@ -1,10 +1,12 @@
 # History
 
-## 0.3.1
+## 0.4.0
 
-Maintenance release.
-* min python version is now 3.10
-* update notes on deployment
+Maintenance release to drop python 3.9: min python version is now 3.10
+
+### other changes
+* updated notes on deployment
+* dependabot configuration
 
 ## 0.3.0
 
