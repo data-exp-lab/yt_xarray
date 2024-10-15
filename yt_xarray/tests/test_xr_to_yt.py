@@ -537,28 +537,23 @@ def test_reversed_axis(stretched, use_callable, chunksizes):
     assert np.all(np.isfinite(vals))
 
 
-def _invalid_nc4_windows():
-    import sys
-
-    import netCDF4
-
-    nc4_v = netCDF4.__version__
-    return "1.7.1" in nc4_v and sys.platform.startswith("win")
-
-
 def test_cf_xarray_disambiguation():
 
-    if _invalid_nc4_windows():
-        # https://github.com/Unidata/netcdf4-python/issues/1373
-        # https://github.com/data-exp-lab/yt_xarray/pull/99
-        pytest.skip("Known nc4, windows endian issue.")
+    # using dim names based on xr.tutorial.open_dataset("air_temperature")
+    clist = ["lon", "lat", "time"]
+    ds = construct_minimal_ds(
+        x_name=clist[0],
+        y_name=clist[1],
+        z_name=clist[2],
+    )
+    # now populate the .cf.standard_names dict
+    ds = ds.cf.guess_coord_axis()
 
-    airds = xr.tutorial.open_dataset("air_temperature")
     # run the whole selection (will internally run coord disambiguation)
     sel = xr2yt.Selection(
-        airds, fields=["air"], sel_dict={"time": 0}, sel_dict_type="isel"
+        ds, fields=["test_field"], sel_dict={"time": 0}, sel_dict_type="isel"
     )
-    xr_da = airds.air
+    xr_da = ds.test_field
     selected_names = []
     for c in sel.selected_coords:
         selected_names.append(xr2yt._cf_xr_coord_disamb(c, xr_da)[0])
@@ -568,22 +563,25 @@ def test_cf_xarray_disambiguation():
 
 
 def test_missing_cfxarray(monkeypatch):
-    if _invalid_nc4_windows():
-        # https://github.com/Unidata/netcdf4-python/issues/1373
-        # https://github.com/data-exp-lab/yt_xarray/pull/99
-        pytest.skip("Known nc4, windows endian issue.")
-
-    airds = xr.tutorial.open_dataset("air_temperature")
+    clist = ["latitude", "longitude", "time"]
+    ds = construct_minimal_ds(
+        x_name=clist[0],
+        y_name=clist[1],
+        z_name=clist[2],
+    )
 
     def _bad_import(name, globals=None, locals=None, fromlist=(), level=0):
         raise ImportError
 
-    xr_da = airds.air
+    xr_da = ds.test_field
     clist = list(xr_da.dims)
     with monkeypatch.context() as m:
         m.setattr(builtins, "__import__", _bad_import)
-        with pytest.raises(ValueError, match=f"{clist[0]} is not"):
 
+        _, cf_xarray_exists = xr2yt._cf_xr_coord_disamb(clist[0], xr_da)
+        assert cf_xarray_exists is False
+
+        with pytest.raises(ValueError, match=f"{clist[0]} is not"):
             _ = xr2yt._convert_to_yt_internal_coords(clist, xr_da)
 
 
