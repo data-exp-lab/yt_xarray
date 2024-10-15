@@ -21,8 +21,10 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install -e .[full,test]
+    - name: List installed deps
+      run: pip list
     - name: Run Tests
-      run: pytest --cov=./ --cov-report=html
+      run: pytest --cov=./ --cov-report=html --color=yes yt_xarray
 
     - name: Upload coverage report
       if: (matrix.platform == 'ubuntu-latest' && matrix.python-version == '3.11')
