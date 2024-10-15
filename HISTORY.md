@@ -7,6 +7,8 @@ Maintenance release to drop python 3.9: min python version is now 3.10
 ### other changes
 * updated notes on deployment
 * dependabot configuration
+* remove usage of xr.tutorials from test suite
+* now testing python 3.12
 
 ## 0.3.0
 
