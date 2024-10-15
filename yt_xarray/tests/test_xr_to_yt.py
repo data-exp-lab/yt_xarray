@@ -538,8 +538,7 @@ def test_reversed_axis(stretched, use_callable, chunksizes):
 
 
 def test_cf_xarray_disambiguation():
-    from cf_xarray.datasets import airds
-
+    airds = xr.tutorial.open_dataset("air_temperature")
     # run the whole selection (will internally run coord disambiguation)
     sel = xr2yt.Selection(
         airds, fields=["air"], sel_dict={"time": 0}, sel_dict_type="isel"
@@ -554,7 +553,7 @@ def test_cf_xarray_disambiguation():
 
 
 def test_missing_cfxarray(monkeypatch):
-    from cf_xarray.datasets import airds
+    airds = xr.tutorial.open_dataset("air_temperature")
 
     def _bad_import(name, globals=None, locals=None, fromlist=(), level=0):
         raise ImportError
