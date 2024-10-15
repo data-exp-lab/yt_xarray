@@ -1,5 +1,11 @@
 # History
 
+## 0.3.1
+
+Maintenance release.
+* min python version is now 3.10
+* update notes on deployment
+
 ## 0.3.0
 
 ### New Features

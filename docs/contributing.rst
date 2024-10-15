@@ -86,11 +86,6 @@ Now you can make your changes locally.
 
     $ pytest
 
-To test multiple python versions, you can use `tox`::
-
-    $ tox
-
-
 7. Commit your changes and push your branch to GitHub::
 
 
@@ -130,11 +125,31 @@ Deploying
 #########
 
 A reminder for the maintainers on how to deploy.
-Make sure all your changes are committed (including an entry in HISTORY.md). Then::
+
+First, make sure that:
+
+* all your changes are committed (including an entry in HISTORY.md).
+* the version in `yt_xarray/__init__.py` matches the version you are releasing.
+
+Then, double check your `main` branch mactches upstream (assuming that `git remote -v` lists
+`git@github.com:data-exp-lab/yt_xarray.git` as the upstream repo)::
+
+    $ git fetch --all
+    $ git checkout main
+    $ git rebase upstream/main
+
+And then create a tag for your new release. For example, if you are releasing
+version `1.1.2`::
 
 
-    $ bump2version patch # possible: major / minor / patch
-    $ git push
-    $ git push --tags
+    $ git tav v1.1.2
 
-github will then push to PyPI if tests pass.
+Now push that tag to the upstream repo::
+
+    $ git push upstream v1.1.2
+
+This will trigger a number of automated Github actions that include an
+automated push to PyPI (if tests pass) and the creation of a draft release
+on Github. Wait for the push to PyPI to finish then go edit the draft release
+that should be visible at https://github.com/data-exp-lab/yt_xarray/releases and
+hit publish after editing release notes.
