@@ -1,5 +1,9 @@
 # History
 
+## 0.4.0dev
+
+active development branch.
+
 ## 0.4.0
 
 Maintenance release to drop python 3.9: min python version is now 3.10
