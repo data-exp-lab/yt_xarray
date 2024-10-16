@@ -39,8 +39,8 @@ def test_signature_array():
 
 
 def test_grid_bounds_plot():
-    le = (0, 0)
-    re = (10, 10)
+    le: tuple[int, ...] = (0, 0)
+    re: tuple[int, ...] = (10, 10)
     gb = _gd.GridBounds(le, re)
 
     f, ax = plt.subplots(1)

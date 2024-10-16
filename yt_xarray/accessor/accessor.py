@@ -1,11 +1,12 @@
 from collections import defaultdict
-from typing import List, Optional, Union
+from typing import Any, List, Union
 
 import numpy as np
 import xarray as xr
 import yt
 from numpy.typing import ArrayLike
 from unyt import unyt_quantity
+from yt.data_objects.static_output import Dataset as ytDataset
 
 from yt_xarray.accessor import _xr_to_yt
 from yt_xarray.accessor._readers import _get_xarray_reader
@@ -34,12 +35,12 @@ class YtAccessor:
 
     def load_grid(
         self,
-        fields: Optional[Union[str, List[str]]] = None,
-        geometry: str = None,
+        fields: Union[str, List[str]] | None = None,
+        geometry: str | None = None,
         use_callable: bool = True,
-        sel_dict: Optional[dict] = None,
-        sel_dict_type: Optional[str] = "isel",
-        chunksizes: Optional[Union[int, ArrayLike]] = None,
+        sel_dict: dict[str, Any] | None = None,
+        sel_dict_type: str = "isel",
+        chunksizes: Union[int, ArrayLike] | None = None,
         **kwargs,
     ):
         """
@@ -104,6 +105,7 @@ class YtAccessor:
                 "geometry = 'geographic', 'internal_geographic' or 'cartesian'"
             )
 
+        length_unit: str | float | None
         if "length_unit" in kwargs:
             length_unit = kwargs.pop("length_unit")
         else:
@@ -149,12 +151,12 @@ class YtAccessor:
         self._yt_ds = ds_yt
         return ds_yt
 
-    def _infer_length_unit(self):
+    def _infer_length_unit(self) -> str | float | None:
         if self.geometry == "geodetic":
             return 1.0
         elif hasattr(self._obj, "geospatial_vertical_units"):
             # some netcdf conventions have this!
-            return self._obj.geospatial_vertical_units
+            return str(self._obj.geospatial_vertical_units)
         return None
 
     _geometry = None
@@ -208,8 +210,8 @@ class YtAccessor:
     def get_bbox(
         self,
         field: str,
-        sel_dict: Optional[dict] = None,
-        sel_dict_type: Optional[str] = "isel",
+        sel_dict: dict[str, Any] | None = None,
+        sel_dict_type: str = "isel",
     ) -> np.ndarray:
         """
         return the bounding box array for a field, with possible selections
@@ -218,6 +220,14 @@ class YtAccessor:
         ----------
         field
             the field to check the bounding box for
+
+        sel_dict: dict
+            an optional selection dictionary to apply to the fields before yt dataset
+            initialization
+
+        sel_dict_type: str
+            either "isel" (default) or "sel" to indicate index or value selection for
+            sel_dict.
 
         Returns
         -------
@@ -279,14 +289,14 @@ class YtAccessor:
         x_field: str,
         y_field: str,
         z_fields: Union[str, List[str]],
-        weight_field: Optional[str] = None,
-        x_bins: Optional[int] = 128,
-        y_bins: Optional[int] = 128,
-        accumulation: Optional[bool] = False,
-        fractional: Optional[bool] = False,
-        fontsize: Optional[int] = 18,
-        figure_size: Optional[int] = 8.0,
-        shading: Optional[str] = "nearest",
+        weight_field: str | None = None,
+        x_bins: int = 128,
+        y_bins: int = 128,
+        accumulation: bool = False,
+        fractional: bool = False,
+        fontsize: int | float = 18,
+        figure_size: int | float = 8.0,
+        shading: str = "nearest",
     ):
         """
         Construct a `yt.PhasePlot`.
@@ -341,15 +351,15 @@ class YtAccessor:
         fields_needed = list(set([x_field, y_field] + z_fields))
         ds = _get_default_ds(self._obj, fields_needed)
 
-        x_field = ("stream", x_field)
-        y_field = ("stream", y_field)
-        z_fields = [("stream", z_f) for z_f in z_fields]
+        pp_x_field = ("stream", x_field)
+        pp_y_field = ("stream", y_field)
+        pp_zfields = [("stream", z_f) for z_f in z_fields]
 
         return yt.PhasePlot(
             ds,
-            x_field,
-            y_field,
-            z_fields,
+            pp_x_field,
+            pp_y_field,
+            pp_zfields,
             weight_field=weight_field,
             x_bins=x_bins,
             y_bins=y_bins,
@@ -447,7 +457,7 @@ class YtAccessor:
 
 def _load_single_grid(
     ds_xr, sel_info, geom, use_callable, fields, length_unit, **kwargs
-):
+) -> ytDataset:
     geometry = geom[0]
 
     interp_required, data_shp, bbox = sel_info.interp_validation(geometry)
@@ -511,7 +521,7 @@ def _load_single_grid(
 
 def _load_chunked_grid(
     ds_xr, sel_info, geom, use_callable, fields, length_unit, chunksizes, **kwargs
-):
+) -> ytDataset:
     if isinstance(chunksizes, int):
         chunksizes = np.array((chunksizes,) * sel_info.ndims)
     elif len(chunksizes) != sel_info.ndims:

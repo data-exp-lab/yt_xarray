@@ -430,7 +430,9 @@ def _convert_to_yt_internal_coords(
     return yt_coords
 
 
-def _determine_yt_geomtype(coord_type: str, coord_list: list[str]) -> str:
+def _determine_yt_geomtype(
+    coord_type: str, coord_list: list[str] | tuple[str, ...]
+) -> str:
     # mainly for expanding geodetic into internal_geographic or geographic as used
     # by yt
     if coord_type == "geodetic":

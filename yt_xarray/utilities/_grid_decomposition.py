@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 from yt import load_amr_grids
@@ -6,6 +6,9 @@ from yt import load_amr_grids
 from yt_xarray.transformations import Transformer
 from yt_xarray.utilities._utilities import _import_optional_dep
 from yt_xarray.utilities.logging import ytxr_log
+
+if TYPE_CHECKING:
+    import matplotlib.pyplot as plt
 
 
 def _dsig2_dpx2(sig1d):
@@ -44,7 +47,7 @@ class GridBounds:
         self.size = size.astype(int)
         self.nd = len(le)
 
-    def plot(self, ax, **kwargs):
+    def plot(self, ax: "plt.Axes", **kwargs):
         # add a rectangle patch for this grid to a matplotlib axis.
         # all kwargs forwarded to matplotlib.patches.Rectangle
         if self.nd > 2:
