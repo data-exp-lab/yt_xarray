@@ -235,14 +235,14 @@ class LinearScale(Transformer):
         transformed_coords = tuple([nc + "_sc" for nc in native_coords])
         super().__init__(native_coords, transformed_coords)
 
-    def _calculate_transformed(self, **coords) -> list[npt.NDarray]:
+    def _calculate_transformed(self, **coords) -> list[npt.NDArray]:
         transformed = []
         for nc_sc in self.transformed_coords:
             nc = nc_sc[:-3]  # native coord name. e.g., go from "x_sc" to just "x"
             transformed.append(np.asarray(coords[nc]) * self.scale[nc])
         return transformed
 
-    def _calculate_native(self, **coords) -> list[npt.NDarray]:
+    def _calculate_native(self, **coords) -> list[npt.NDArray]:
         native = []
         for nc in self.native_coords:
             native.append(np.asarray(coords[nc + "_sc"]) / self.scale[nc])

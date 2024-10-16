@@ -81,7 +81,7 @@ def _isel_tester(
             assert sel.full_shape[idim] == sel.selected_shape[idim]
 
 
-@pytest.mark.parametrize("coord", ("latitude", "longitude", "depth"))
+@pytest.mark.parametrize("coord_input", ("latitude", "longitude", "depth"))
 def test_selection_isel(ds_xr, coord_input):
     coord: str = coord_input
     fields = list(ds_xr.data_vars)

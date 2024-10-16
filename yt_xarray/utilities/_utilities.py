@@ -34,7 +34,7 @@ class _DimConstructor:
         dim_vals = np.linspace(self.dim_min, self.dim_max, self.dim_n)
         if self.stretched:
             dx = dim_vals[1:] - dim_vals[:-1]
-            dim_vals[self.dim_n_2 :] = dim_vals[self.dim_n :] + dx[0] * 2.0
+            dim_vals[self.dim_n_2 :] = dim_vals[self.dim_n_2 :] + dx[0] * 2.0
         return dim_vals
 
 
@@ -67,7 +67,7 @@ class _DsConstructor:
         self.z = _DimConstructor(
             min_z, max_z, n_z, z_name, stretched=is_stretched[z_name]
         )
-        self.z_units = (z_units,)
+        self.z_units = z_units
         self.field_name = field_name
         self.coord_order = coord_order
         self.is_stretched = is_stretched
