@@ -2,11 +2,12 @@ import os
 import os.path
 
 import pytest
+from yt.data_objects.static_output import Dataset as ytDataset
 
 from yt_xarray.sample_data import load_random_xr_data
 
 
-def get_xr_ds():
+def get_xr_ds() -> ytDataset:
     fields = {
         "temperature": ("x", "y", "z"),
         "pressure": ("x", "y", "z"),

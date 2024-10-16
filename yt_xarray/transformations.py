@@ -1,5 +1,5 @@
 import abc
-from typing import Callable, List, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Mapping, Union
 
 import numpy as np
 import unyt
@@ -20,10 +20,10 @@ class Transformer(abc.ABC):
 
     Parameters
     ----------
-    native_coords: Tuple[str]
+    native_coords: tuple[str, ...]
         the names of the native coordinates, e.g., ('x0', 'y0', 'z0'), on
         which data is defined.
-    transformed_coords: Tuple[str]
+    transformed_coords: tuple[str, ...]
         the names of the transformed coordinates, e.g., ('x1', 'y1', 'z1')
     coord_aliases: dict
         optional dictionary of coordinate aliases to map arbitrary keys to
@@ -36,9 +36,9 @@ class Transformer(abc.ABC):
 
     def __init__(
         self,
-        native_coords: Tuple[str],
-        transformed_coords: Tuple[str],
-        coord_aliases: Optional[dict] = None,
+        native_coords: tuple[str, ...],
+        transformed_coords: tuple[str, ...],
+        coord_aliases: dict[str, str] | None = None,
     ):
         self.native_coords = native_coords
         self._native_coords_set = set(native_coords)
@@ -68,7 +68,7 @@ class Transformer(abc.ABC):
                 raise ValueError(msg)
         self.coord_aliases = coord_aliases
 
-    def _disambiguate_coord(self, coord):
+    def _disambiguate_coord(self, coord: str) -> str:
         if coord in self.native_coords or coord in self.transformed_coords:
             return coord
 
@@ -79,14 +79,14 @@ class Transformer(abc.ABC):
         raise ValueError(msg)
 
     @abc.abstractmethod
-    def _calculate_native(self, **coords):
+    def _calculate_native(self, **coords) -> list[npt.NDArray]:
         """
         function to convert from transformed to native coordinates. Must be
         implemented by each child class.
         """
 
     @abc.abstractmethod
-    def _calculate_transformed(self, **coords):
+    def _calculate_transformed(self, **coords) -> list[npt.NDArray]:
         """
         function to convert from native to transformed coordinates. Must be
         implemented by each child class.
@@ -170,7 +170,9 @@ class Transformer(abc.ABC):
         return self._calculate_transformed(**new_coords)
 
     @abc.abstractmethod
-    def calculate_transformed_bbox(self, bbox_dict: dict) -> np.ndarray:
+    def calculate_transformed_bbox(
+        self, bbox_dict: Mapping[str, npt.NDArray]
+    ) -> npt.NDArray:
         """
         Calculates a bounding box in transformed coordinates for a bounding box dictionary
         in native coordinates.
@@ -198,7 +200,7 @@ class LinearScale(Transformer):
 
     Parameters
     ----------
-    native_coords: Tuple[str]
+    native_coords: tuple[str, ...]
         the names of the native coordinates, e.g., ('x', 'y', 'z'), on
         which data is defined.
     scale: dict
@@ -224,7 +226,9 @@ class LinearScale(Transformer):
 
     """
 
-    def __init__(self, native_coords: Tuple[str, ...], scale: Optional[dict] = None):
+    def __init__(
+        self, native_coords: tuple[str, ...], scale: dict[str, float] | None = None
+    ):
         if scale is None:
             scale = {}
 
@@ -277,7 +281,9 @@ _default_radial_axes = dict(
 )
 
 
-def _sphere_to_cart(r, theta, phi):
+def _sphere_to_cart(
+    r: npt.NDArray, theta: npt.NDArray, phi: npt.NDArray
+) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
     # r : radius
     # theta: colatitude
     # phi: azimuth
@@ -289,7 +295,9 @@ def _sphere_to_cart(r, theta, phi):
     return x, y, z
 
 
-def _cart_to_sphere(x, y, z):
+def _cart_to_sphere(
+    x: npt.NDArray, y: npt.NDArray, z: npt.NDArray
+) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
     # will return phi (azimuth) in +/- np.pi
     r = np.sqrt(x * x + y * y + z * z)
     theta = np.arccos(z / (r + 1e-12))
@@ -338,10 +346,10 @@ class GeocentricCartesian(Transformer):
     def __init__(
         self,
         radial_type: str = "radius",
-        radial_axis: Optional[str] = None,
-        r_o: Optional[Union[float, unyt.unyt_quantity]] = None,
-        coord_aliases: Optional[dict] = None,
-        use_neg_lons: Optional[bool] = False,
+        radial_axis: str | None = None,
+        r_o: Union[float, unyt.unyt_quantity] | None = None,
+        coord_aliases: dict[str, str] | None = None,
+        use_neg_lons: bool = False,
     ):
         transformed_coords = ("x", "y", "z")
 
@@ -366,7 +374,7 @@ class GeocentricCartesian(Transformer):
 
         super().__init__(native_coords, transformed_coords, coord_aliases=coord_aliases)
 
-    def _calculate_transformed(self, **coords):
+    def _calculate_transformed(self, **coords) -> list[npt.NDArray]:
         if self.radial_type == "depth":
             r_val = self._r_o - coords[self.radial_axis]
         elif self.radial_type == "altitude":
@@ -378,9 +386,9 @@ class GeocentricCartesian(Transformer):
         theta = (90.0 - lat) * np.pi / 180.0  # colatitude in radians
         phi = lon * np.pi / 180.0  # azimuth in radians
         x, y, z = _sphere_to_cart(r_val, theta, phi)
-        return x, y, z
+        return [x, y, z]
 
-    def _calculate_native(self, **coords):
+    def _calculate_native(self, **coords) -> list[npt.NDArray]:
         r, theta, phi = _cart_to_sphere(coords["x"], coords["y"], coords["z"])
         lat = 90.0 - theta * 180.0 / np.pi
         lon = phi * 180.0 / np.pi
@@ -394,9 +402,11 @@ class GeocentricCartesian(Transformer):
             r = r - self._r_o
         elif self.radial_type == "depth":
             r = self._r_o - r
-        return r, lat, lon
+        return [r, lat, lon]
 
-    def calculate_transformed_bbox(self, bbox_dict: dict) -> np.ndarray:
+    def calculate_transformed_bbox(
+        self, bbox_dict: Mapping[str, npt.NDArray]
+    ) -> npt.NDArray:
         """
         Calculates a bounding box in transformed coordinates for a bounding box dictionary
         in native coordinates.
@@ -447,20 +457,20 @@ class GeocentricCartesian(Transformer):
 def build_interpolated_cartesian_ds(
     xr_ds: xr.Dataset,
     transformer: Transformer,
-    fields: Optional[Union[str, Tuple[str]]] = None,
-    grid_resolution: Optional[List[int]] = None,
-    fill_value: Optional[float] = None,
-    length_unit: Optional[str] = "km",
-    refine_grid: Optional[bool] = False,
-    refine_by: Optional[int] = 2,
-    refine_max_iters: Optional[int] = 200,
-    refine_min_grid_size: Optional[int] = 10,
-    refinement_method: Optional[str] = "division",
-    sel_dict: Optional[dict] = None,
-    sel_dict_type: Optional[str] = "isel",
-    bbox_dict: Optional[dict] = None,
-    interp_method: Optional[str] = "nearest",
-    interp_func: Optional[Callable] = None,
+    fields: Union[str, tuple[str, ...], list[str]] | None = None,
+    grid_resolution: tuple[int, ...] | list[int] | None = None,
+    fill_value: float | None = None,
+    length_unit: str | float = "km",
+    refine_grid: bool = False,
+    refine_by: int = 2,
+    refine_max_iters: int = 200,
+    refine_min_grid_size: int = 10,
+    refinement_method: str = "division",
+    sel_dict: dict[str, Any] | None = None,
+    sel_dict_type: str = "isel",
+    bbox_dict: Mapping[str, npt.NDArray] | None = None,
+    interp_method: str = "nearest",
+    interp_func: Callable[..., npt.NDArray] | None = None,
 ):
     """
     Build a yt cartesian dataset containing fields interpolated on demand
@@ -514,9 +524,6 @@ def build_interpolated_cartesian_ds(
 
     """
 
-    if fields is None:
-        fields = list(xr_ds.data_vars)
-
     valid_methods = ("interpolate", "nearest")
     if interp_method not in valid_methods:
         msg = f"interp_method must be one of: {valid_methods}, found {interp_method}."
@@ -528,12 +535,19 @@ def build_interpolated_cartesian_ds(
             )
             interp_method = "interpolate"
 
-    if isinstance(fields, str):
-        fields = (fields,)
+    valid_fields: list[str]
+    if fields is None:
+        valid_fields = list(xr_ds.data_vars)
+    elif isinstance(fields, str):
+        valid_fields = [
+            fields,
+        ]
+    else:
+        valid_fields = [f for f in fields]
 
     sel_info = _xr_to_yt.Selection(
         xr_ds,
-        fields=fields,
+        fields=valid_fields,
         sel_dict=sel_dict,
         sel_dict_type=sel_dict_type,
     )
@@ -607,8 +621,8 @@ def build_interpolated_cartesian_ds(
 
         return output_vals
 
-    data_dict = {}
-    for field in fields:
+    data_dict: dict[str, Callable[..., npt.NDArray]] = {}
+    for field in valid_fields:
         data_dict[field] = _read_data
 
     if grid_resolution is None:

@@ -29,7 +29,7 @@ class Selection:
 
     def __init__(
         self,
-        xr_ds,
+        xr_ds: xr.Dataset,
         fields: List[str] | None = None,
         sel_dict: dict[str, Any] | None = None,
         sel_dict_type: str | None = "isel",
@@ -100,7 +100,7 @@ class Selection:
                 search_for = selector.start
             elif isinstance(selector, (float, np.datetime64, int)):
                 search_for = selector
-            elif isinstance(
+            elif isinstance(  # type: ignore[unreachable]
                 selector, (collections.abc.Sequence, np.ndarray, xr.DataArray)
             ):
                 if _size_of_array_like(selector) > 1:
@@ -402,7 +402,7 @@ def _cf_xr_coord_disamb(
 
 
 def _convert_to_yt_internal_coords(
-    coord_list: tuple[str] | list[str], xr_field: xr.DataArray
+    coord_list: tuple[str, ...] | list[str], xr_field: xr.DataArray
 ):
     yt_coords = []
     for c in coord_list:
