@@ -242,7 +242,7 @@ def construct_ds_with_extra_dim(
     return xr.Dataset(data_vars=data_vars)
 
 
-def _find_file(file: PathLike[str]) -> PathLike[str] | str:
+def _find_file(file: PathLike[str] | str) -> PathLike[str] | str:
     if os.path.isfile(file):
         return file
 

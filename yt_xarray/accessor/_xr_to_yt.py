@@ -45,14 +45,14 @@ class Selection:
         self.sel_dict_type = sel_dict_type
 
         # all these attributes are set in _process_selection
-        self.selected_shape: Tuple[int] | None = None
-        self.full_bbox = None
+        self.selected_shape: Tuple[int, ...]
+        self.full_bbox: npt.NDArray
         self.selected_bbox: npt.NDArray
-        self.full_coords: Tuple[str]
-        self.selected_coords: Tuple[str]
+        self.full_coords: Tuple[str, ...]
+        self.selected_coords: Tuple[str, ...]
         self.starting_indices: npt.NDArray
-        self.selected_time: float | None = None
-        self.ndims: int | None = None
+        self.selected_time: float
+        self.ndims: int
         self.grid_type: _GridType
         self.cell_widths: list[Any]
         self.global_dims: list[Any]
@@ -274,7 +274,9 @@ class Selection:
 
         return vars
 
-    def interp_validation(self, geometry):
+    def interp_validation(
+        self, geometry: str
+    ) -> tuple[bool, tuple[int, ...], npt.NDArray]:
         # checks if yt will need to interpolate to cell center
         # returns a tuple of (bool, shape, bbox). If the bool is True then
         # interpolation is required.
@@ -345,7 +347,7 @@ for ky, vals in _coord_aliases.items():
 known_coord_aliases = _default_known_coord_aliases.copy()
 
 
-def reset_coordinate_aliases():
+def reset_coordinate_aliases() -> None:
     kys_to_pop = [
         ky
         for ky in known_coord_aliases.keys()
@@ -399,7 +401,9 @@ def _cf_xr_coord_disamb(
     return None, True
 
 
-def _convert_to_yt_internal_coords(coord_list: tuple[str], xr_field: xr.DataArray):
+def _convert_to_yt_internal_coords(
+    coord_list: tuple[str] | list[str], xr_field: xr.DataArray
+):
     yt_coords = []
     for c in coord_list:
         cname = c.lower()

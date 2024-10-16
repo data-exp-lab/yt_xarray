@@ -8,6 +8,7 @@ on:
     paths:
       - yt_experiments/**/*.py
       - pyproject.toml
+      - requirements/typecheck.txt
       - .github/workflows/type-checking.yaml
   workflow_dispatch:
 
@@ -16,11 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     name: type check
     timeout-minutes: 60
-
-    concurrency:
-      # auto-cancel any in-progress job *on the same branch*
-      group: ${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
 
     steps:
     - name: Checkout repo
@@ -37,7 +33,7 @@ jobs:
     - name: Build
       run: |
         python3 -m pip install --upgrade pip
-        python3 -m pip install "mypy==1.11.2"
+        python3 -m pip install -r requirements/typecheck.txt
 
     - name: list installed deps
       run: python -m pip list

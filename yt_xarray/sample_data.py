@@ -1,10 +1,12 @@
+from typing import Mapping
+
 import numpy as np
 import xarray as xr
 
 
 def load_random_xr_data(
-    fields: dict[str, tuple[str, ...]],
-    dims: dict[str, tuple[int | float, int | float, int]],
+    fields: Mapping[str, tuple[str, ...]],
+    dims: Mapping[str, tuple[int | float, int | float, int]],
     length_unit: str | None = None,
 ) -> xr.Dataset:
     """

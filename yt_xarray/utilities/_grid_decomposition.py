@@ -442,7 +442,7 @@ class ChunkInfo:
 
     def __init__(
         self,
-        data_shp: Tuple[int,],
+        data_shp: Tuple[int, ...],
         chunksizes: np.ndarray,
         starting_index_offset: np.ndarray = None,
     ):

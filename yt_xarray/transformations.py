@@ -1,10 +1,11 @@
 import abc
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, List, Mapping, Optional, Tuple, Union
 
 import numpy as np
 import unyt
 import xarray as xr
 import yt
+from numpy import typing as npt
 from unyt import earth_radius as _earth_radius
 
 from yt_xarray.accessor import _xr_to_yt
@@ -119,7 +120,7 @@ class Transformer(abc.ABC):
 
         return new_coords
 
-    def to_native(self, **coords):
+    def to_native(self, **coords: npt.NDArray) -> list[npt.NDArray]:
         """
         Calculate the native coordinates from transformed coordinates.
 
@@ -131,7 +132,7 @@ class Transformer(abc.ABC):
 
         Returns
         -------
-        tuple
+        list
             coordinate values in the native coordinate system, in order
             of the native_coords attribute.
 
@@ -144,7 +145,7 @@ class Transformer(abc.ABC):
         new_coords = self._validate_input_coords(coords, "transformed")
         return self._calculate_native(**new_coords)
 
-    def to_transformed(self, **coords):
+    def to_transformed(self, **coords: npt.NDArray) -> list[npt.NDArray]:
         """
         Calculate the transformed coordinates from native coordinates.
 
@@ -156,7 +157,7 @@ class Transformer(abc.ABC):
 
         Returns
         -------
-        tuple
+        list
             coordinate values in the transformed coordinate system, in order
             of the transformed_coords attribute.
 
@@ -223,7 +224,7 @@ class LinearScale(Transformer):
 
     """
 
-    def __init__(self, native_coords: Tuple[str], scale: Optional[dict] = None):
+    def __init__(self, native_coords: Tuple[str, ...], scale: Optional[dict] = None):
         if scale is None:
             scale = {}
 
@@ -234,20 +235,22 @@ class LinearScale(Transformer):
         transformed_coords = tuple([nc + "_sc" for nc in native_coords])
         super().__init__(native_coords, transformed_coords)
 
-    def _calculate_transformed(self, **coords):
+    def _calculate_transformed(self, **coords) -> list[npt.NDarray]:
         transformed = []
         for nc_sc in self.transformed_coords:
             nc = nc_sc[:-3]  # native coord name. e.g., go from "x_sc" to just "x"
             transformed.append(np.asarray(coords[nc]) * self.scale[nc])
         return transformed
 
-    def _calculate_native(self, **coords):
+    def _calculate_native(self, **coords) -> list[npt.NDarray]:
         native = []
         for nc in self.native_coords:
             native.append(np.asarray(coords[nc + "_sc"]) / self.scale[nc])
         return native
 
-    def calculate_transformed_bbox(self, bbox_dict: dict) -> np.ndarray:
+    def calculate_transformed_bbox(
+        self, bbox_dict: Mapping[str, npt.NDArray]
+    ) -> npt.NDArray:
         """
         Calculates a bounding box in transformed coordinates for a bounding box dictionary
         in native coordinates.
