@@ -1,4 +1,3 @@
-from collections import defaultdict
 from typing import Any, List, Union
 
 import numpy as np
@@ -21,7 +20,6 @@ class YtAccessor:
         self._obj = xarray_obj
         self._bbox_cart = {}
         self._bbox = {}
-        self._field_grids = defaultdict(lambda: None)
         self._active_yt_ds = None
 
     @property
