@@ -1,17 +1,19 @@
-from typing import Dict, Optional
+from typing import Mapping
 
 import numpy as np
 import xarray as xr
 
 
 def load_random_xr_data(
-    fields: Dict[str, tuple], dims: Dict[str, tuple], length_unit: Optional[str] = None
+    fields: Mapping[str, tuple[str, ...]],
+    dims: Mapping[str, tuple[int | float, int | float, int]],
+    length_unit: str | None = None,
 ) -> xr.Dataset:
     """
 
     Parameters
     ----------
-    fields : Dict[str, tuple]
+    fields : dict[str, tuple]
         A dictionary specifying fields and their dimensions
         {'field1': ('x', 'y', 'z'), 'field2': ('x', 'y')}
     dims

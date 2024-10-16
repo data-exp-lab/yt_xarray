@@ -142,7 +142,7 @@ def test_chunk_bad_length():
         "field0": ("x", "y", "z"),
         "field1": ("x", "y", "z"),
     }
-    dims = {"x": (0, 1, 30), "y": (0, 2, 40), "z": (-1, 0.5, 20)}
+    dims = {"x": (0, 1, 30), "y": (0, 2, 40), "z": (-1.0, 0.5, 20)}
     ds = sample_data.load_random_xr_data(fields, dims)
 
     with pytest.raises(ValueError, match="The number of elements in "):
@@ -175,7 +175,7 @@ def test_chunk_info_caching():
     chunksizes = np.array([5, 5, 5], dtype="int")
     data_shape = (10, 15, 20)
 
-    def _get_ch():
+    def _get_ch() -> ChunkInfo:
         return ChunkInfo(data_shape, chunksizes)
 
     ch = _get_ch()

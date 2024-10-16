@@ -4,6 +4,9 @@
 
 active development branch.
 
+### Changes
+* improve type checking, add mypy action in CI
+
 ## 0.4.0
 
 Maintenance release to drop python 3.9: min python version is now 3.10

@@ -1,9 +1,12 @@
 import builtins
+from typing import Any
 
 import numpy as np
 import pytest
 import xarray as xr
 import yt
+from numpy import typing as npt
+from yt.data_objects.static_output import Dataset as ytDataset
 
 import yt_xarray.accessor._xr_to_yt as xr2yt
 from yt_xarray.utilities._utilities import (
@@ -39,7 +42,7 @@ c_m_ds_kwargs = {"latitude": "y_name", "longitude": "x_name", "altitude": "z_nam
 def test_selection_aliases(coord):
     for othername in xr2yt._coord_aliases[coord]:
         kwargs = {c_m_ds_kwargs[coord]: othername}
-        ds = construct_minimal_ds(**kwargs)
+        ds = construct_minimal_ds(**kwargs)  # type: ignore[arg-type]
         fields = list(ds.data_vars)
         sel = xr2yt.Selection(ds, fields)
         assert np.all(sel.starting_indices == np.array((0, 0, 0)))
@@ -54,7 +57,13 @@ def test_selection_aliases(coord):
             assert xr2yt.known_coord_aliases[othername] in sel.yt_coord_names
 
 
-def _isel_tester(ds_xr, sel, fields, coord, start_index):
+def _isel_tester(
+    ds_xr: xr.Dataset,
+    sel: xr2yt.Selection,
+    fields: list[str],
+    coord: str,
+    start_index: int,
+) -> None:
     dim_id = ds_xr.data_vars[fields[0]].dims.index(coord)
     expected = np.array((0, 0, 0))
     expected[dim_id] = start_index
@@ -72,10 +81,12 @@ def _isel_tester(ds_xr, sel, fields, coord, start_index):
             assert sel.full_shape[idim] == sel.selected_shape[idim]
 
 
-@pytest.mark.parametrize("coord", ("latitude", "longitude", "depth"))
-def test_selection_isel(ds_xr, coord):
+@pytest.mark.parametrize("coord_input", ("latitude", "longitude", "depth"))
+def test_selection_isel(ds_xr, coord_input):
+    coord: str = coord_input
     fields = list(ds_xr.data_vars)
 
+    sel_dict: dict[str, Any]
     sel_dict = {coord: slice(1, len(ds_xr.coords[coord]))}
     sel_dict_type = "isel"
     sel = xr2yt.Selection(ds_xr, fields, sel_dict=sel_dict, sel_dict_type=sel_dict_type)
@@ -476,7 +487,9 @@ def test_add_3rd_axis_name(yt_geom):
         _ = xr2yt._add_3rd_axis_name("bad_geometry", expected[:-1])
 
 
-def _get_pixelized_slice(yt_ds):
+def _get_pixelized_slice(
+    yt_ds: ytDataset,
+) -> tuple[Any, tuple[npt.NDArray, npt.NDArray | None] | npt.NDArray]:
     slc = yt_ds.slice(
         yt_ds.coordinates.axis_id["depth"],
         yt_ds.domain_center[yt_ds.coordinates.axis_id["depth"]],
@@ -492,7 +505,9 @@ def _get_pixelized_slice(yt_ds):
     return slc, vals
 
 
-def _get_ds_for_reverse_tests(stretched, use_callable, chunksizes):
+def _get_ds_for_reverse_tests(
+    stretched: bool, use_callable: bool, chunksizes: tuple[int, ...]
+) -> ytDataset:
     ds = construct_minimal_ds(
         min_x=1,
         max_x=359,

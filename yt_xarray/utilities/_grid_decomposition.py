@@ -1,21 +1,25 @@
-from typing import List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
+from numpy import typing as npt
 from yt import load_amr_grids
 
 from yt_xarray.transformations import Transformer
 from yt_xarray.utilities._utilities import _import_optional_dep
 from yt_xarray.utilities.logging import ytxr_log
 
+if TYPE_CHECKING:
+    import matplotlib.pyplot as plt
 
-def _dsig2_dpx2(sig1d):
+
+def _dsig2_dpx2(sig1d: npt.NDArray) -> npt.NDArray:
     dsig1_dpx1 = sig1d[1:] - sig1d[:-1]
     dsig2_dpx2 = np.zeros(sig1d.shape)
     dsig2_dpx2[1:-1] = dsig1_dpx1[1:] - dsig1_dpx1[:-1]
     return dsig2_dpx2
 
 
-def _lowpass_filter(sig_1d):
+def _lowpass_filter(sig_1d: npt.NDArray) -> npt.NDArray:
     # pass a signature array through a lowpass filter. should expose some of these
     # for when a grid is not properly decomposing...
     msg = "This functionality requires scipy. Install it and try again."
@@ -44,7 +48,7 @@ class GridBounds:
         self.size = size.astype(int)
         self.nd = len(le)
 
-    def plot(self, ax, **kwargs):
+    def plot(self, ax: "plt.Axes", **kwargs):
         # add a rectangle patch for this grid to a matplotlib axis.
         # all kwargs forwarded to matplotlib.patches.Rectangle
         if self.nd > 2:
@@ -61,7 +65,7 @@ class GridBounds:
         ax.add_patch(rect)
 
 
-def _find_max_change(f_d2_d2: np.ndarray, f: np.ndarray):
+def _find_max_change(f_d2_d2: npt.NDArray, f: npt.NDArray) -> int:
     # find an index corresponding to the maximum change across 0
     # f_d2_d2 : second derivative of f
     # f: the function
@@ -69,7 +73,7 @@ def _find_max_change(f_d2_d2: np.ndarray, f: np.ndarray):
     sign_changes = np.where(signs[:-2] != signs[1:-1])[0] + 1
     mag_change = f_d2_d2[sign_changes + 1] - f_d2_d2[sign_changes]
     max_coord = sign_changes[np.max(mag_change) == mag_change]
-    coord = max_coord[0]
+    coord: int = max_coord[0]
     offset = -2 * np.sign(f[coord + 1] - f[coord])
     coord = int(coord + offset)  # offset 1 extra depending on sign
     if coord < 5:
@@ -82,7 +86,7 @@ def _find_max_change(f_d2_d2: np.ndarray, f: np.ndarray):
 _sig_axis_sum_order = {0: (1, -1), 1: (0, -1), 2: (0, 0)}
 
 
-def _signature_array(phi: np.ndarray, dim: int) -> np.ndarray:
+def _signature_array(phi: npt.NDArray, dim: int) -> npt.NDArray:
     # calculate the signature array for an image mask for the
     # specified dimension
     if phi.ndim == 2:
@@ -97,7 +101,9 @@ def _signature_array(phi: np.ndarray, dim: int) -> np.ndarray:
     return sig_array
 
 
-def _find_grid_division_coord_1d(grid: GridBounds, phi: np.ndarray, dim: int) -> int:
+def _find_grid_division_coord_1d(
+    grid: GridBounds, phi: npt.NDArray, dim: int
+) -> int | None:
     # find the pixel index at which to split the grid for the present
     # dimension
     if phi.shape[dim] < 10:
@@ -116,19 +122,20 @@ def _find_grid_division_coord_1d(grid: GridBounds, phi: np.ndarray, dim: int) ->
     return coord
 
 
-def _find_grid_division_coord(phi: np.ndarray, grid: GridBounds) -> Tuple[int, ...]:
+def _find_grid_division_coord(phi: npt.NDArray, grid: GridBounds) -> tuple[int, ...]:
     phi_subset = _grid_subset(grid.le, grid.re, phi)
 
-    grid_coords = []
+    grid_coords: list[int | None] = []
     for grid_dim in range(grid.nd):
         grid_coords.append(_find_grid_division_coord_1d(grid, phi_subset, grid_dim))
-
-    return tuple(grid_coords)
+    # ignoring type checking on following line because:
+    # Argument 1 to "tuple" has incompatible type "list[int | None]"; expected "Iterable[int]"
+    return tuple(grid_coords)  # type: ignore[arg-type]
 
 
 def _grid_subset(
-    le: Tuple[int, ...], re: Tuple[int, ...], phi: np.ndarray
-) -> np.ndarray:
+    le: Tuple[int, ...], re: Tuple[int, ...], phi: npt.NDArray
+) -> npt.NDArray:
     nd = len(le)
     slcs = tuple([slice(le[idim], re[idim]) for idim in range(nd)])
     phivals = phi[slcs]
@@ -136,27 +143,32 @@ def _grid_subset(
 
 
 def _grid_filled_fraction(
-    le: Tuple[int, ...], re: Tuple[int, ...], phi: np.ndarray
+    le: Tuple[int, ...], re: Tuple[int, ...], phi: npt.NDArray
 ) -> float:
     grid_vals = _grid_subset(le, re, phi)
-    return np.sum(grid_vals) / grid_vals.size
+    np_sum: float = np.sum(grid_vals)
+    grid_size: int = grid_vals.size
+    return np_sum / grid_size
 
 
 def _grid_contains_points(
-    le: Tuple[int, ...], re: Tuple[int, ...], phi: np.ndarray
+    le: Tuple[int, ...], re: Tuple[int, ...], phi: npt.NDArray
 ) -> bool:
     phi_subset = _grid_subset(le, re, phi)
-    return np.any(phi_subset > 0)
+    contains: bool = np.any(phi_subset > 0)
+    return contains
 
 
-def _split_grid_at_coord(grid: GridBounds, coord, phi: np.ndarray) -> List[GridBounds]:
+def _split_grid_at_coord(grid: GridBounds, coord, phi: npt.NDArray) -> List[GridBounds]:
     new_grids = []
     le = grid.le
     re = grid.re
 
     # get list of new left and new right edges
-    new_l_edges = []
-    new_r_edges = []
+    new_l_edges: list[tuple[float, ...] | float] = []
+    new_r_edges: list[tuple[float, ...] | float] = []
+    idim_res: tuple[float, ...] | float
+    idim_les: tuple[float, ...] | float
     for idim in range(phi.ndim):
         if coord[idim] is not None:
             idim_les = (le[idim], coord[idim])
@@ -186,7 +198,7 @@ def _split_grid_at_coord(grid: GridBounds, coord, phi: np.ndarray) -> List[GridB
 
 
 def decompose_image_mask_bisect(
-    phi: np.ndarray,
+    phi: npt.NDArray,
     max_iters: int = 100,
     ideal_grid_fill: float = 0.95,
     min_grid_size: int = 10,
@@ -209,9 +221,9 @@ def decompose_image_mask_bisect(
             coords = []
             for dim in range(phi.ndim):
                 coords.append(int(grid.le[dim] + grid.size[dim] / 2))
-            coords = tuple(coords)
+            coords_in = tuple(coords)
 
-            new_grids = _split_grid_at_coord(grids[igrid], coords, phi)
+            new_grids = _split_grid_at_coord(grids[igrid], coords_in, phi)
             if len(new_grids) > 0:
                 # remove divided grid
                 del grids[igrid]
@@ -232,7 +244,7 @@ def decompose_image_mask_bisect(
 
 
 def decompose_image_mask(
-    phi: np.ndarray,
+    phi: npt.NDArray,
     max_iters: int = 100,
     ideal_grid_fill: float = 0.9,
     min_grid_size: int = 10,
@@ -278,12 +290,12 @@ def decompose_image_mask(
 
 
 def _create_image_mask(
-    bbox_cart: np.ndarray,
-    bbox_native: np.ndarray,
-    res: Union[tuple, np.ndarray],
+    bbox_cart: npt.NDArray,
+    bbox_native: npt.NDArray,
+    res: Union[tuple[int, ...], npt.NDArray],
     tform: Transformer,
     chunks: Optional[int] = 100,
-) -> np.ndarray:
+) -> npt.NDArray:
     emsg = (
         "This functionality requires dask[array], "
         "install it with `pip install dask[array]`"
@@ -295,24 +307,25 @@ def _create_image_mask(
     wid = (bbox_cart[:, 1] - bbox_cart[:, 0]) / res
 
     # cell centers
-    xyz = [
+    xyz_1d = [
         bbox_cart[i, 0] + wid[i] / 2.0 + wid[i] * da.arange(res[i], chunks=chunks)
         for i in range(3)
     ]
-    xyz = da.meshgrid(*xyz, indexing="ij")
+    xyz = da.meshgrid(*xyz_1d, indexing="ij")
+    del xyz_1d
 
     # mark 1 if any cell corner falls in domain.
     corner_masks = []
 
     def _get_corner_mask(
-        bbox_native: np.ndarray,
+        bbox_native: npt.NDArray,
         tform: Transformer,
-        xyz: Tuple[np.ndarray, np.ndarray, np.ndarray],
-        wid: np.ndarray,
+        xyz: Tuple[npt.NDArray, npt.NDArray, npt.NDArray],
+        wid: npt.NDArray,
         ix: float,
         iy: float,
         iz: float,
-    ) -> np.ndarray:
+    ) -> npt.NDArray:
         # check if an individual corner of a mesh element falls within the native
         # bounding box.
         #
@@ -352,9 +365,9 @@ def _create_image_mask(
 
 
 def _get_yt_ds(
-    image_mask: np.ndarray,
-    data_callables: dict,
-    bbox: np.ndarray,
+    image_mask: npt.NDArray,
+    data_callables: dict[str, Callable[[Any], Any]],
+    bbox: npt.NDArray,
     max_iters=200,
     min_grid_size=10,
     refine_by=2,
@@ -442,9 +455,9 @@ class ChunkInfo:
 
     def __init__(
         self,
-        data_shp: Tuple[int,],
-        chunksizes: np.ndarray,
-        starting_index_offset: np.ndarray = None,
+        data_shp: Tuple[int, ...],
+        chunksizes: npt.NDArray,
+        starting_index_offset: npt.NDArray | None = None,
     ):
 
         self.chunksizes = chunksizes
@@ -459,12 +472,12 @@ class ChunkInfo:
             starting_index_offset = np.zeros(self.data_shape.shape, dtype=int)
         self.starting_index_offset = starting_index_offset
 
-    _si: List[np.ndarray] = None
-    _ei: List[np.ndarray] = None
-    _sizes: List[np.ndarray] = None
+    _si: List[npt.NDArray] | None = None
+    _ei: List[npt.NDArray] | None = None
+    _sizes: List[npt.NDArray] | None = None
 
     @property
-    def si(self) -> List[np.ndarray]:
+    def si(self) -> List[npt.NDArray]:
         """
         The starting indices of individual chunks by dimension.
         Includes any global offset.
@@ -510,7 +523,7 @@ class ChunkInfo:
         return self._si
 
     @property
-    def ei(self) -> List[np.ndarray]:
+    def ei(self) -> List[npt.NDArray]:
         """
         The ending indices of individual chunks by dimension.
         Includes any global offset.
@@ -521,7 +534,7 @@ class ChunkInfo:
         return self._ei
 
     @property
-    def sizes(self) -> List[np.ndarray]:
+    def sizes(self) -> List[npt.NDArray]:
         if self._sizes is None:
             _ = self.si
             assert self._sizes is not None

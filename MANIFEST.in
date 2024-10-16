@@ -11,6 +11,7 @@ recursive-include tests *
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
 exclude .editorconfig
+exclude requirements/typecheck.txt
 
 recursive-include docs *.ipynb
 recursive-exclude * .ipynb_checkpoints/*
