@@ -1,9 +1,6 @@
 name: type checking
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     paths:
       - yt_experiments/**/*.py
