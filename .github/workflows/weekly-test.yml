@@ -24,5 +24,7 @@ jobs:
           run: |
             python -m pip install --upgrade pip
             python -m pip install -e .[full,test]
+        - name: List installed deps
+          run: pip list
         - name: Run Tests
           run: pytest -v .
