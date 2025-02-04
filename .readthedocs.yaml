@@ -11,6 +11,10 @@ build:
   tools:
     python: "3.10"
 
+sphinx:
+  # Path to your Sphinx configuration file.
+  configuration: docs/conf.py
+
 # Optionally declare the Python requirements required to build your docs
 python:
    install:
