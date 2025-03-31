@@ -3,7 +3,7 @@ from typing import Any, List, Union
 import numpy as np
 import xarray as xr
 import yt
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from unyt import unyt_quantity
 from yt.data_objects.static_output import Dataset as ytDataset
 
@@ -210,7 +210,7 @@ class YtAccessor:
         field: str,
         sel_dict: dict[str, Any] | None = None,
         sel_dict_type: str = "isel",
-    ) -> np.ndarray:
+    ) -> NDArray:
         """
         return the bounding box array for a field, with possible selections
 

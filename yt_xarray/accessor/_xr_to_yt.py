@@ -494,7 +494,7 @@ def _check_grid_stretchiness(x: npt.NDArray) -> _GridType:
         return _GridType.STRETCHED
 
 
-def _check_for_time(dim_name, dim_vals: np.ndarray):
+def _check_for_time(dim_name, dim_vals: npt.NDArray) -> bool:
     return "time" in dim_name.lower() or type(dim_vals) is np.datetime64
 
 

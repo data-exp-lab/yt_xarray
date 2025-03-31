@@ -176,7 +176,7 @@ def _test_time_coord(nt: int = 5) -> npt.NDArray:
 
 def _get_test_coord(
     cname, n, minv: float | None = None, maxv: float | None = None
-) -> np.ndarray:
+) -> npt.NDArray[np.floating]:
     if cname in known_coord_aliases:
         cname = known_coord_aliases[cname]
 
@@ -211,7 +211,7 @@ def construct_ds_with_extra_dim(
     ncoords: int | None = None,
     nd_space: int = 3,
     reverse_indices: list[int] | None = None,
-):
+) -> xr.Dataset:
     coord_configs = {
         0: (dim_name, "x", "y", "z"),
         1: (dim_name, "z", "y", "x"),

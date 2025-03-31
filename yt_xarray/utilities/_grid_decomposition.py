@@ -456,28 +456,30 @@ class ChunkInfo:
     def __init__(
         self,
         data_shp: Tuple[int, ...],
-        chunksizes: npt.NDArray,
-        starting_index_offset: npt.NDArray | None = None,
+        chunksizes: npt.NDArray[np.int64],
+        starting_index_offset: npt.NDArray[np.int64] | None = None,
     ):
 
         self.chunksizes = chunksizes
-        self.data_shape = np.asarray(data_shp)
-        self.n_chnk = self.data_shape / chunksizes  # may not be int
+        self.data_shape = np.asarray(data_shp).astype(np.int64)
+        self.n_chnk: npt.NDArray[np.int64] = (
+            self.data_shape / chunksizes
+        )  # may not be int
         self.n_whl_chnk = np.floor(self.n_chnk).astype(int)  # whole chunks in each dim
         self.n_part_chnk = np.ceil(self.n_chnk - self.n_whl_chnk).astype(int)
         self.n_tots = np.prod(self.n_part_chnk + self.n_whl_chnk)
 
         self.ndim = len(data_shp)
         if starting_index_offset is None:
-            starting_index_offset = np.zeros(self.data_shape.shape, dtype=int)
-        self.starting_index_offset = starting_index_offset
+            starting_index_offset = np.zeros(self.data_shape.shape, dtype=np.int64)
+        self.starting_index_offset: npt.NDArray[np.int64] = starting_index_offset
 
-    _si: List[npt.NDArray] | None = None
-    _ei: List[npt.NDArray] | None = None
-    _sizes: List[npt.NDArray] | None = None
+    _si: List[npt.NDArray[np.int64]] | None = None
+    _ei: List[npt.NDArray[np.int64]] | None = None
+    _sizes: List[npt.NDArray[np.int64]] | None = None
 
     @property
-    def si(self) -> List[npt.NDArray]:
+    def si(self) -> List[npt.NDArray[np.int64]]:
         """
         The starting indices of individual chunks by dimension.
         Includes any global offset.
@@ -523,7 +525,7 @@ class ChunkInfo:
         return self._si
 
     @property
-    def ei(self) -> List[npt.NDArray]:
+    def ei(self) -> List[npt.NDArray[np.int64]]:
         """
         The ending indices of individual chunks by dimension.
         Includes any global offset.
@@ -534,7 +536,7 @@ class ChunkInfo:
         return self._ei
 
     @property
-    def sizes(self) -> List[npt.NDArray]:
+    def sizes(self) -> List[npt.NDArray[np.int64]]:
         if self._sizes is None:
             _ = self.si
             assert self._sizes is not None
