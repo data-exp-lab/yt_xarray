@@ -45,7 +45,7 @@ skip =  ["venv", "benchmarks"]
 version = {attr = "yt_xarray.__version__"}
 
 [tool.mypy]
-files = ["yt_experiments",]
+files = ["yt_xarray",]
 python_version = "3.10"
 warn_unused_configs = true
 strict = true
