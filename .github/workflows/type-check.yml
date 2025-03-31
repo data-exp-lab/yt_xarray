@@ -3,7 +3,7 @@ name: type checking
 on:
   pull_request:
     paths:
-      - yt_experiments/**/*.py
+      - yt_xarray/**/*.py
       - pyproject.toml
       - requirements/typecheck.txt
       - .github/workflows/type-checking.yaml
