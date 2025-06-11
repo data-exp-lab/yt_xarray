@@ -1,11 +1,19 @@
 # History
 
-## 0.4.0dev
+## 0.4.1
 
-active development branch.
+Maintenance release: improves some type hints, improves CI test suite.
 
 ### Changes
-* improve type checking, add mypy action in CI
+* Improve type checking by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/106
+* only run type check test on PR by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/107
+* list deps in weekly action by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/108
+* add sphinx config entry to .readthedocs.yaml by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/111
+* improving type hints related to numpy by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/114
+* more typing fixes by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/115
+* add workflow dispatches to some of the tests by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/117
+
+**Full Changelog**: https://github.com/data-exp-lab/yt_xarray/compare/v0.4.0...v0.4.1
 
 ## 0.4.0
 
