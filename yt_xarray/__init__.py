@@ -2,7 +2,7 @@
 
 __author__ = """Chris Havlin"""
 __email__ = "chris.havlin@gmail.com"
-__version__ = "0.4.1"
+__version__ = "0.4.1dev"
 
 
 # import the xarray accessor so it is registered with xarray

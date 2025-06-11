@@ -1,5 +1,11 @@
 # History
 
+## 0.4.1dev 
+
+### New Features 
+
+### Changes
+
 ## 0.4.1
 
 Maintenance release: improves some type hints, improves CI test suite.
