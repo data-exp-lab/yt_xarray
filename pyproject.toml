@@ -54,5 +54,5 @@ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 warn_unreachable = true
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
-disable_error_code = ["import-untyped", "import-not-found"]
+disable_error_code = ["import-untyped"]
 no_implicit_reexport = false

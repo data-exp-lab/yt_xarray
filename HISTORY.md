@@ -7,6 +7,7 @@
 
 ### Changes
 * drop support for python 3.10: min python version is now 3.11
+* the mypy CI job now installs yt_xarray and its dependencies before type checking
 
 ## 0.4.1
 
