@@ -182,6 +182,7 @@ class YtAccessor:
         geometry: str | None = None,
         bbox: Mapping[str, ArrayLike] | ArrayLike | None = None,
         cell_spacing: Mapping[str, float] | ArrayLike | float | None = None,
+        pin_bbox: bool = False,
         use_callable: bool = True,
         sel_dict: dict[str, Any] | None = None,
         sel_dict_type: str = "isel",
@@ -218,7 +219,7 @@ class YtAccessor:
             array of shape (ndim, 2) in the dimension order of the fields.
             Defaults to the extent of the (selected) xarray data. If the
             width in a dimension is not an integer multiple of the cell spacing,
-            the maximum is extended so that it is.
+            the maximum is extended so that it is, unless pin_bbox is True.
 
         cell_spacing : dict, ArrayLike or float
             the cell spacing of the new grid in native coordinates: a dictionary
@@ -229,6 +230,15 @@ class YtAccessor:
             level 0 spacing and defaults to the largest value not exceeding the
             largest spacing of the xarray grid for which the finest level
             exactly resolves the smallest spacing in each dimension.
+
+        pin_bbox : bool
+            controls how a bbox width that is not an integer multiple of the
+            cell spacing is reconciled. If False (default), the bbox maximum is
+            extended to the next cell boundary and the cell spacing is kept.
+            If True, the bbox is kept exactly and the cell spacing is decreased
+            in that dimension to the largest value that divides the width into
+            an integer number of cells. With refine_grid, the adjusted spacing
+            is the level 0 spacing.
 
         use_callable : bool
             if True (default), then the yt dataset will interpolate on demand
@@ -308,7 +318,7 @@ class YtAccessor:
             refine_by = _refine_by_dict_to_array(sel_info, refine_by)
         rb = _validate_refine_by(refine_by, sel_info.ndims)
         dxyz = _validate_cell_spacing(sel_info, cell_spacing, refine_grid, rb)
-        bbox_arr = _validate_uniform_bbox(sel_info, bbox, dxyz)
+        bbox_arr, dxyz = _validate_uniform_bbox(sel_info, bbox, dxyz, pin_bbox)
         dims = np.round((bbox_arr[:, 1] - bbox_arr[:, 0]) / dxyz).astype(int)
 
         if refine_grid:
@@ -807,7 +817,8 @@ def _validate_uniform_bbox(
     sel_info: _xr_to_yt.Selection,
     bbox: Mapping[str, ArrayLike] | ArrayLike | None,
     dxyz: npt.NDArray[np.float64],
-) -> npt.NDArray[np.float64]:
+    pin_bbox: bool = False,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     ndims = sel_info.ndims
     bbox_arr: npt.NDArray[np.float64]
     if bbox is None:
@@ -829,6 +840,15 @@ def _validate_uniform_bbox(
 
     widths = bbox_arr[:, 1] - bbox_arr[:, 0]
     dims = np.ceil(widths / dxyz - 1e-8).astype(int)
+    if pin_bbox:
+        new_dxyz = widths / dims
+        if not np.allclose(new_dxyz, dxyz):
+            ytxr_log.info(
+                "bbox width is not an integer multiple of cell_spacing, decreasing "
+                f"cell_spacing from {dxyz} to {new_dxyz} to match the bbox."
+            )
+        return bbox_arr, new_dxyz
+
     new_max = bbox_arr[:, 0] + dims * dxyz
     if not np.allclose(new_max, bbox_arr[:, 1]):
         ytxr_log.info(
@@ -836,7 +856,7 @@ def _validate_uniform_bbox(
             f"bbox max from {bbox_arr[:, 1]} to {new_max}."
         )
     bbox_arr[:, 1] = new_max
-    return bbox_arr
+    return bbox_arr, dxyz
 
 
 def _log_grid_plan(

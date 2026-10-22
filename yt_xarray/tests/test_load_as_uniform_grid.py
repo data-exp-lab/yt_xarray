@@ -113,6 +113,53 @@ def test_bbox_rounds_up_to_spacing(ds_stretched):
     np.testing.assert_allclose(ds_yt.index.grids[0].dds.d[0], 0.3)
 
 
+def test_pin_bbox_decreases_spacing(ds_stretched):
+    # 4 / 0.3 is not an integer: the bbox is kept and dx shrinks to 4 / 14
+    ds_yt = ds_stretched.yt.load_as_uniform_grid(
+        length_unit="m", cell_spacing={"x": 0.3, "y": 0.5, "z": 0.5}, pin_bbox=True
+    )
+    assert tuple(ds_yt.domain_dimensions) == (14, 4, 4)
+    np.testing.assert_allclose(ds_yt.domain_right_edge.d, [4.0, 2.0, 1.0])
+    np.testing.assert_allclose(ds_yt.index.grids[0].dds.d, [4.0 / 14, 0.5, 0.5])
+
+    # an explicit bbox is also pinned exactly
+    bbox = np.array([[0.5, 3.5], [0.0, 2.0], [-1.0, 1.0]])
+    ds_yt = ds_stretched.yt.load_as_uniform_grid(
+        length_unit="m", bbox=bbox, cell_spacing=0.7, pin_bbox=True
+    )
+    np.testing.assert_allclose(ds_yt.domain_left_edge.d, bbox[:, 0])
+    np.testing.assert_allclose(ds_yt.domain_right_edge.d, bbox[:, 1])
+    assert tuple(ds_yt.domain_dimensions) == (5, 3, 3)
+
+    # when the width is already an integer multiple, the spacing is unchanged
+    ds_yt = ds_stretched.yt.load_as_uniform_grid(
+        length_unit="m", cell_spacing=0.5, pin_bbox=True
+    )
+    assert tuple(ds_yt.domain_dimensions) == (8, 4, 4)
+    np.testing.assert_allclose(ds_yt.index.grids[0].dds.d, 0.5)
+    _check_linear(ds_yt)
+
+
+@pytest.mark.parametrize("extra_kwargs", [{"chunksizes": 3}, {"refine_grid": True}])
+def test_pin_bbox_multi_grid(ds_stretched, extra_kwargs: dict[str, Any]):
+    ds_yt = ds_stretched.yt.load_as_uniform_grid(
+        length_unit="m", cell_spacing=0.3, pin_bbox=True, **extra_kwargs
+    )
+    assert len(ds_yt.index.grids) > 1
+    np.testing.assert_allclose(ds_yt.domain_left_edge.d, [0.0, 0.0, -1.0])
+    np.testing.assert_allclose(ds_yt.domain_right_edge.d, [4.0, 2.0, 1.0])
+    assert tuple(ds_yt.domain_dimensions) == (14, 7, 7)
+    expected_dds = np.array([4.0 / 14, 2.0 / 7, 2.0 / 7])
+    for grid in ds_yt.index.grids:
+        np.testing.assert_allclose(
+            grid.dds.d, expected_dds / ds_yt.refine_by**grid.Level
+        )
+    np.testing.assert_allclose(
+        ds_yt.index.grid_right_edge.d.max(axis=0), [4.0, 2.0, 1.0]
+    )
+    _check_linear(ds_yt)
+
+
 def test_fill_value_outside_source(ds_stretched):
     bbox = np.array([[-1.0, 5.0], [0.0, 2.0], [-1.0, 1.0]])
     ds_yt = ds_stretched.yt.load_as_uniform_grid(

@@ -55,6 +55,13 @@ which is both cheaper and more faithful than transforming to cartesian coordinat
 first. The resampled grid may be chunked into multiple yt grids with the
 ``chunksizes`` argument, exactly as for ``ds.yt.load_grid``.
 
+When the width of the bounding box is not an integer multiple of the cell spacing
+in some dimension, the two must be reconciled. By default the bounding box maximum
+is extended to the next cell boundary, keeping the requested cell spacing. With
+``pin_bbox=True``, the bounding box is instead kept exactly and the cell spacing
+is decreased in that dimension to the largest value that divides the width into a
+whole number of cells.
+
 By default the cell spacing is the smallest spacing of the stretched grid in each
 dimension, so that every feature of the original grid is resolved. For grids where
 the fine spacing is confined to a small region, this can be wasteful, and
