@@ -3,6 +3,7 @@
 ## 0.4.1dev 
 
 ### New Features 
+* new `ds.yt.load_as_uniform_grid` accessor method for interpolating stretched grids onto uniform grids (optionally a refined hierarchy of uniform grids) in native coordinates, with on-demand interpolation.
 
 ### Changes
 

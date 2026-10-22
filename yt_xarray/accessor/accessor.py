@@ -1,16 +1,28 @@
-from typing import Any, List, Union
+from typing import Any, List, Literal, Mapping, Union
 
 import numpy as np
 import xarray as xr
 import yt
+from numpy import typing as npt
 from numpy.typing import ArrayLike, NDArray
 from unyt import unyt_quantity
 from yt.data_objects.static_output import Dataset as ytDataset
 
 from yt_xarray.accessor import _xr_to_yt
-from yt_xarray.accessor._readers import _get_xarray_reader
+from yt_xarray.accessor._readers import (
+    _get_interpolating_reader,
+    _get_xarray_reader,
+    _interpolate_to_uniform_grid,
+)
 from yt_xarray.accessor._xr_to_yt import _load_full_field_from_xr
-from yt_xarray.utilities._grid_decomposition import ChunkInfo
+from yt_xarray.utilities._grid_decomposition import (
+    ChunkInfo,
+    GridSpec,
+    _uniform_chunk_grids,
+    _validate_refine_by,
+    plan_stretched_grid_refinement,
+    summarize_grid_plan,
+)
 from yt_xarray.utilities.logging import ytxr_log
 
 
@@ -78,6 +90,48 @@ class YtAccessor:
         yt StreamDataset
 
         """
+        fields, sel_info, geom, length_unit, kwargs = self._prepare_load(
+            fields, geometry, sel_dict, sel_dict_type, kwargs
+        )
+
+        if chunksizes is None:
+            ds_yt = _load_single_grid(
+                self._obj, sel_info, geom, use_callable, fields, length_unit, **kwargs
+            )
+        elif sel_info.grid_type == _xr_to_yt._GridType.STRETCHED:
+            raise NotImplementedError(
+                "Stretched grids cannot set the chunksizes argument."
+            )
+        else:
+            ds_yt = _load_chunked_grid(
+                self._obj,
+                sel_info,
+                geom,
+                use_callable,
+                fields,
+                length_unit,
+                chunksizes,
+                **kwargs,
+            )
+        self._yt_ds = ds_yt
+        return ds_yt
+
+    def _prepare_load(
+        self,
+        fields: Union[str, List[str]] | None,
+        geometry: str | None,
+        sel_dict: dict[str, Any] | None,
+        sel_dict_type: str,
+        kwargs: dict[str, Any],
+    ) -> tuple[
+        List[str],
+        _xr_to_yt.Selection,
+        tuple[str, list[str]],
+        str | float,
+        dict[str, Any],
+    ]:
+        # the shared validation for the load_* methods: field list, selection
+        # info, yt geometry and axis order, length unit and simulation time.
         if fields is None:
             # might as well try!
             fields = list(self._obj.data_vars)
@@ -103,18 +157,19 @@ class YtAccessor:
                 "geometry = 'geographic', 'internal_geographic' or 'cartesian'"
             )
 
-        length_unit: str | float | None
+        length_unit: str | float
         if "length_unit" in kwargs:
             length_unit = kwargs.pop("length_unit")
         else:
-            length_unit = self._infer_length_unit()
-            if length_unit is None:
+            inferred_unit = self._infer_length_unit()
+            if inferred_unit is None:
                 raise ValueError(
                     "cannot determine length_unit, please provide as"
                     " a keyword argument."
                 )
+            length_unit = inferred_unit
 
-        axis_order = sel_info.yt_coord_names
+        axis_order: list[str] = list(sel_info.yt_coord_names)
 
         geom = (geometry, axis_order)
 
@@ -127,25 +182,218 @@ class YtAccessor:
             simtime = unyt_quantity(int(simtime), "ns")
         kwargs.update({"sim_time": simtime})
 
-        if chunksizes is None:
-            ds_yt = _load_single_grid(
-                self._obj, sel_info, geom, use_callable, fields, length_unit, **kwargs
-            )
-        elif sel_info.grid_type == _xr_to_yt._GridType.STRETCHED:
+        return fields, sel_info, geom, length_unit, kwargs
+
+    def load_as_uniform_grid(
+        self,
+        fields: Union[str, List[str]] | None = None,
+        geometry: str | None = None,
+        bbox: Mapping[str, ArrayLike] | ArrayLike | None = None,
+        cell_spacing: Mapping[str, float] | ArrayLike | float | None = None,
+        use_callable: bool = True,
+        sel_dict: dict[str, Any] | None = None,
+        sel_dict_type: str = "isel",
+        chunksizes: Union[int, ArrayLike] | None = None,
+        interp_method: Literal["linear", "nearest"] = "linear",
+        fill_value: float = np.nan,
+        refine_grid: bool = False,
+        refine_by: Mapping[str, int] | Union[int, ArrayLike] = 2,
+        max_level: int | None = None,
+        **kwargs,
+    ):
+        """
+        Initializes a yt dataset of uniform grids, interpolating the supplied
+        fields on demand from the (possibly stretched) xarray grid in the
+        native coordinates of the xarray dataset.
+
+        This is useful for consumers of yt datasets that require a constant
+        cell spacing within each grid, e.g., yt_idv, when the xarray dataset
+        is defined on a stretched grid: the interpolation happens in native
+        coordinates, which is cheaper and more faithful than a transformation
+        to cartesian coordinates.
+
+        Parameters
+        ----------
+        fields : str, list[str]
+            list of fields to include. If None, will try to use all fields
+
+        geometry : str
+            the geometry to pass to yt. If not provided, will attempt to infer.
+
+        bbox : dict or ArrayLike
+            the bounding box of the new grid in native coordinates. Either a
+            dictionary mapping coordinate names to (min, max) pairs or an
+            array of shape (ndim, 2) in the dimension order of the fields.
+            Defaults to the extent of the (selected) xarray data. If the
+            width in a dimension is not an integer multiple of the cell spacing,
+            the maximum is extended so that it is.
+
+        cell_spacing : dict, ArrayLike or float
+            the cell spacing of the new grid in native coordinates: a dictionary
+            mapping coordinate names to spacing, an array of length ndim in the
+            dimension order of the fields or a single value for all dimensions.
+            If refine_grid is False, defaults to the smallest spacing of the
+            xarray grid in each dimension. If refine_grid is True, this is the
+            level 0 spacing and defaults to the largest value not exceeding the
+            largest spacing of the xarray grid for which the finest level
+            exactly resolves the smallest spacing in each dimension.
+
+        use_callable : bool
+            if True (default), then the yt dataset will interpolate on demand
+            from the open xarray Dataset handle. If False, interpolation is
+            done up front for every grid.
+
+        sel_dict: dict
+            an optional selection dictionary to apply to the fields before yt dataset
+            initialization
+
+        sel_dict_type: str
+            either "isel" (default) or "sel" to indicate index or value selection for
+            sel_dict.
+
+        chunksizes: int or ArrayLike
+            if set, will decompose the uniform grid into multiple grids with
+            at most chunksizes cells in each dimension. Cannot be combined
+            with refine_grid.
+
+        interp_method: str
+            ``'linear'`` (default) or ``'nearest'``, passed to xarray's interp.
+
+        fill_value: float
+            the value for cells of the new grid that fall outside the extent
+            of the xarray data (default np.nan).
+
+        refine_grid: bool
+            if True (default False), build a hierarchy of uniform grids of
+            increasing refinement wherever the xarray grid spacing is finer
+            than the current level's spacing. The hierarchy is planned from
+            the xarray coordinate values alone, no field values are read.
+
+        refine_by: int, ArrayLike or dict
+            the refinement factor between levels when refine_grid is True.
+            Either a single integer (default 2), one integer per dimension in
+            the dimension order of the fields, or a dictionary mapping
+            coordinate names to integers, e.g., ``{'x': 2, 'y': 1, 'z': 2}``.
+            A dimension with a refinement factor of 1 is never refined.
+
+        max_level: int
+            the maximum refinement level when refine_grid is True. Defaults
+            to the level required to resolve the smallest spacing of the
+            xarray grid.
+
+        kwargs :
+            any additional keyword arguments to pass to yt.load_uniform_grid
+            or yt.load_amr_grids. Note that the domain is not periodic by
+            default: pass ``periodicity`` to override.
+
+        Returns
+        -------
+        yt StreamDataset
+
+        """
+
+        fields, sel_info, geom, length_unit, kwargs = self._prepare_load(
+            fields, geometry, sel_dict, sel_dict_type, kwargs
+        )
+
+        if sel_info.ndims != 3:
             raise NotImplementedError(
-                "Stretched grids cannot set the chunksizes argument."
+                "load_as_uniform_grid is only implemented for 3D fields at present."
             )
+
+        if interp_method not in ("linear", "nearest"):
+            raise ValueError(
+                f"interp_method must be 'linear' or 'nearest', found {interp_method}"
+            )
+
+        if refine_grid and chunksizes is not None:
+            raise ValueError("chunksizes cannot be combined with refine_grid=True.")
+
+        # the interpolated grid is not periodic unless the user says so
+        kwargs.setdefault("periodicity", (False, False, False))
+
+        if isinstance(refine_by, Mapping):
+            refine_by = _refine_by_dict_to_array(sel_info, refine_by)
+        rb = _validate_refine_by(refine_by, sel_info.ndims)
+        dxyz = _validate_cell_spacing(sel_info, cell_spacing, refine_grid, rb)
+        bbox_arr = _validate_uniform_bbox(sel_info, bbox, dxyz)
+        dims = np.round((bbox_arr[:, 1] - bbox_arr[:, 0]) / dxyz).astype(int)
+
+        if refine_grid:
+            coord_arrays = _selected_coord_arrays(sel_info)
+            grids = plan_stretched_grid_refinement(
+                coord_arrays, bbox_arr, dxyz, refine_by=rb, max_level=max_level
+            )
+            _log_grid_plan(grids, coord_arrays, bbox_arr)
+        elif chunksizes is not None:
+            chunksizes = _validate_chunksizes(chunksizes, sel_info.ndims)
+            grids = _uniform_chunk_grids(bbox_arr, dxyz, chunksizes)
+            ytxr_log.info(f"Constructing a yt chunked grid with {len(grids)} chunks.")
         else:
-            ds_yt = _load_chunked_grid(
-                self._obj,
-                sel_info,
-                geom,
-                use_callable,
-                fields,
-                length_unit,
-                chunksizes,
+            grids = [
+                GridSpec(
+                    left_edge=bbox_arr[:, 0],
+                    right_edge=bbox_arr[:, 1],
+                    dimensions=dims,
+                    level=0,
+                )
+            ]
+
+        if use_callable:
+            reader = _get_interpolating_reader(
+                self._obj, sel_info, interp_method=interp_method, fill_value=fill_value
+            )
+
+        def _field_data(grid: GridSpec) -> dict[str, Any]:
+            field_data = {}
+            for field in fields:
+                units = sel_info.units[field]
+                if use_callable:
+                    field_data[field] = (reader, units)
+                else:
+                    dds = (grid.right_edge - grid.left_edge) / grid.dimensions
+                    vals = _interpolate_to_uniform_grid(
+                        self._obj,
+                        sel_info,
+                        field,
+                        grid.left_edge,
+                        dds,
+                        grid.dimensions,
+                        interp_method=interp_method,
+                        fill_value=fill_value,
+                    )
+                    field_data[field] = (vals, units)
+            return field_data
+
+        if len(grids) == 1 and not refine_grid:
+            ds_yt = yt.load_uniform_grid(
+                _field_data(grids[0]),
+                dims,
+                geometry=geom[0],
+                bbox=bbox_arr,
+                length_unit=length_unit,
+                axis_order=_as_axis_order(geom[1]),
+                nprocs=1,
                 **kwargs,
             )
+        else:
+            grid_data = []
+            for grid in grids:
+                gdict = grid.to_yt_dict()
+                gdict.update(_field_data(grid))
+                grid_data.append(gdict)
+            if refine_grid:
+                kwargs["refine_by"] = rb
+            ds_yt = yt.load_amr_grids(
+                grid_data,
+                dims,
+                geometry=geom[0],
+                bbox=bbox_arr,
+                length_unit=length_unit,
+                axis_order=_as_axis_order(geom[1]),
+                **kwargs,
+            )
+
         self._yt_ds = ds_yt
         return ds_yt
 
@@ -451,6 +699,172 @@ class YtAccessor:
             x_log=x_log,
             y_log=y_log,
         )
+
+
+def _as_axis_order(axis_order: list[str]) -> tuple[str, str, str]:
+    return (axis_order[0], axis_order[1], axis_order[2])
+
+
+def _validate_chunksizes(
+    chunksizes: Union[int, ArrayLike], ndims: int
+) -> npt.NDArray[np.int64]:
+    if np.ndim(chunksizes) == 0:
+        return np.array((int(chunksizes),) * ndims, dtype=int)
+    chunksizes_arr = np.asarray(chunksizes, dtype=int)
+    if chunksizes_arr.size != ndims:
+        raise ValueError(
+            f"The number of elements in chunksizes {chunksizes_arr.size} "
+            f"must match the dimensionality {ndims}"
+        )
+    return chunksizes_arr
+
+
+def _coord_name_to_index(sel_info: _xr_to_yt.Selection, name: str) -> int:
+    # map an xarray coordinate name (or its yt name, or a known alias) to the
+    # dimension index
+    if name in sel_info.selected_coords:
+        return int(sel_info.selected_coords.index(name))
+    if name in sel_info.yt_coord_names:
+        return int(sel_info.yt_coord_names.index(name))
+    alias = _xr_to_yt.known_coord_aliases.get(name.lower())
+    if alias is not None and alias in sel_info.yt_coord_names:
+        return int(sel_info.yt_coord_names.index(alias))
+    raise KeyError(
+        f"{name} is not a selected coordinate. Valid names are "
+        f"{sel_info.selected_coords} (or {tuple(sel_info.yt_coord_names)})."
+    )
+
+
+def _refine_by_dict_to_array(
+    sel_info: _xr_to_yt.Selection, refine_by: Mapping[str, int]
+) -> npt.NDArray[np.int64]:
+    rb = np.zeros(sel_info.ndims, dtype=np.int64)
+    for name, val in refine_by.items():
+        rb[_coord_name_to_index(sel_info, name)] = val
+    if np.any(rb == 0):
+        raise ValueError(
+            "refine_by must be provided for every dimension: "
+            f"{sel_info.selected_coords}"
+        )
+    return rb
+
+
+def _selected_coord_arrays(
+    sel_info: _xr_to_yt.Selection,
+) -> list[npt.NDArray[np.float64]]:
+    # reconstruct the (increasing) coordinate values of the selected dimensions
+    coord_arrays = []
+    for idim in range(sel_info.ndims):
+        c0 = sel_info.selected_bbox[idim, 0]
+        widths = np.asarray(sel_info.cell_widths[idim], dtype=np.float64)
+        coord_arrays.append(np.concatenate([[c0], c0 + np.cumsum(widths)]))
+    return coord_arrays
+
+
+def _validate_cell_spacing(
+    sel_info: _xr_to_yt.Selection,
+    cell_spacing: Mapping[str, float] | ArrayLike | float | None,
+    refine_grid: bool,
+    refine_by: npt.NDArray[np.int64],
+) -> npt.NDArray[np.float64]:
+    ndims = sel_info.ndims
+    min_widths = np.array([np.min(w) for w in sel_info.cell_widths], dtype=np.float64)
+    max_widths = np.array([np.max(w) for w in sel_info.cell_widths], dtype=np.float64)
+
+    dxyz: npt.NDArray[np.float64]
+    if cell_spacing is None:
+        if refine_grid:
+            # choose the largest level 0 spacing that does not exceed the
+            # largest source spacing and for which the finest level lands
+            # exactly on the smallest source spacing in each dimension
+            dxyz = min_widths.copy()
+            for idim in range(ndims):
+                if refine_by[idim] > 1:
+                    ratio = max_widths[idim] / min_widths[idim]
+                    n_lev = np.floor(np.log(ratio) / np.log(refine_by[idim]) + 1e-8)
+                    dxyz[idim] = min_widths[idim] * refine_by[idim] ** n_lev
+        else:
+            dxyz = min_widths
+        ytxr_log.info(f"Using a cell_spacing of {dxyz}.")
+        return dxyz
+
+    if isinstance(cell_spacing, Mapping):
+        dxyz = np.full(ndims, np.nan, dtype=np.float64)
+        for name, val in cell_spacing.items():
+            dxyz[_coord_name_to_index(sel_info, name)] = val
+        if np.any(np.isnan(dxyz)):
+            raise ValueError(
+                "cell_spacing must be provided for every dimension: "
+                f"{sel_info.selected_coords}"
+            )
+    elif np.ndim(cell_spacing) == 0:
+        dxyz = np.full(ndims, float(cell_spacing), dtype=np.float64)
+    else:
+        dxyz = np.asarray(cell_spacing, dtype=np.float64)
+        if dxyz.shape != (ndims,):
+            raise ValueError(
+                f"cell_spacing must have {ndims} elements, found {cell_spacing}"
+            )
+
+    if np.any(dxyz <= 0):
+        raise ValueError(f"cell_spacing values must be positive, found {dxyz}")
+    return dxyz
+
+
+def _validate_uniform_bbox(
+    sel_info: _xr_to_yt.Selection,
+    bbox: Mapping[str, ArrayLike] | ArrayLike | None,
+    dxyz: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    ndims = sel_info.ndims
+    bbox_arr: npt.NDArray[np.float64]
+    if bbox is None:
+        bbox_arr = sel_info.selected_bbox.copy()
+    elif isinstance(bbox, Mapping):
+        bbox_arr = sel_info.selected_bbox.copy()
+        for name, val in bbox.items():
+            bbox_arr[_coord_name_to_index(sel_info, name), :] = np.asarray(val)
+    else:
+        bbox_arr = np.asarray(bbox, dtype=np.float64)
+        if bbox_arr.shape != (ndims, 2):
+            raise ValueError(
+                f"bbox must have shape ({ndims}, 2), found {bbox_arr.shape}"
+            )
+    bbox_arr = bbox_arr.astype(np.float64)
+
+    if np.any(bbox_arr[:, 1] <= bbox_arr[:, 0]):
+        raise ValueError(f"bbox max must exceed bbox min, found {bbox_arr}")
+
+    widths = bbox_arr[:, 1] - bbox_arr[:, 0]
+    dims = np.ceil(widths / dxyz - 1e-8).astype(int)
+    new_max = bbox_arr[:, 0] + dims * dxyz
+    if not np.allclose(new_max, bbox_arr[:, 1]):
+        ytxr_log.info(
+            "bbox width is not an integer multiple of cell_spacing, extending "
+            f"bbox max from {bbox_arr[:, 1]} to {new_max}."
+        )
+    bbox_arr[:, 1] = new_max
+    return bbox_arr
+
+
+def _log_grid_plan(
+    grids: list[GridSpec],
+    coord_arrays: list[npt.NDArray[np.float64]],
+    bbox: npt.NDArray[np.float64],
+) -> None:
+    summary = summarize_grid_plan(grids)
+    total = 0
+    for level, entry in sorted(summary.items()):
+        total += entry["n_cells"]
+        ytxr_log.info(
+            f"    level {level}: {entry['n_grids']} grids, {entry['n_cells']} cells"
+        )
+    min_widths = np.array([np.min(c[1:] - c[:-1]) for c in coord_arrays])
+    n_uniform = int(np.prod(np.ceil((bbox[:, 1] - bbox[:, 0]) / min_widths)))
+    ytxr_log.info(
+        f"Refined grid plan has {total} cells in {len(grids)} grids. A uniform "
+        f"grid at the finest source spacing would have {n_uniform} cells."
+    )
 
 
 def _load_single_grid(

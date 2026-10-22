@@ -1,7 +1,9 @@
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
 from numpy import typing as npt
+from numpy.typing import ArrayLike
 from yt import load_amr_grids
 
 from yt_xarray.transformations import Transformer
@@ -498,24 +500,10 @@ class ChunkInfo:
                 # if this dim has a partial chunk at the end, add on a
                 # partial chunk.
                 if self.n_part_chnk[idim] == 1:
-                    si_0_partial = ei_0[-1]
-                    ei_0_partial = self.data_shape[idim] - si_0_partial
-                    si_0 = np.concatenate(
-                        [
-                            si_0,
-                            [
-                                si_0_partial,
-                            ],
-                        ]
-                    )
-                    ei_0 = np.concatenate(
-                        [
-                            ei_0,
-                            [
-                                ei_0[-1] + ei_0_partial,
-                            ],
-                        ]
-                    )
+                    si_0_partial = si0 + self.chunksizes[idim] * self.n_whl_chnk[idim]
+                    ei_0_partial = si0 + self.data_shape[idim]
+                    si_0 = np.concatenate([si_0, [si_0_partial]])
+                    ei_0 = np.concatenate([ei_0, [ei_0_partial]])
                 si_list.append(si_0)
                 ei_list.append(ei_0)
                 size_list.append(ei_0 - si_0)
@@ -541,3 +529,389 @@ class ChunkInfo:
             _ = self.si
             assert self._sizes is not None
         return self._sizes
+
+
+_Box = Tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]
+
+
+@dataclass
+class GridSpec:
+    """
+    Minimal description of a single yt grid patch: physical edges, cell
+    dimensions and refinement level.
+    """
+
+    left_edge: npt.NDArray[np.float64]
+    right_edge: npt.NDArray[np.float64]
+    dimensions: npt.NDArray[np.int64]
+    level: int = 0
+
+    @property
+    def n_cells(self) -> int:
+        return int(np.prod(self.dimensions))
+
+    def to_yt_dict(self) -> dict[str, Any]:
+        return {
+            "left_edge": self.left_edge,
+            "right_edge": self.right_edge,
+            "dimensions": self.dimensions,
+            "level": self.level,
+        }
+
+
+def _validate_refine_by(
+    refine_by: Union[int, ArrayLike], ndim: int
+) -> npt.NDArray[np.int64]:
+    rb: npt.NDArray[np.int64]
+    if np.ndim(refine_by) == 0:
+        rb = np.full(ndim, int(refine_by), dtype=np.int64)
+    else:
+        rb = np.asarray(refine_by, dtype=np.int64)
+        if rb.shape != (ndim,):
+            raise ValueError(
+                f"refine_by must be an integer or a sequence of {ndim} integers, "
+                f"found {refine_by!r}"
+            )
+    if np.any(rb < 1):
+        raise ValueError(f"refine_by values must be >= 1, found {refine_by!r}")
+    return rb
+
+
+def _uniform_chunk_grids(
+    bbox: npt.NDArray[np.float64],
+    dxyz: npt.NDArray[np.float64],
+    chunksizes: npt.NDArray[np.int64],
+) -> List[GridSpec]:
+    # decompose a uniform grid spanning bbox with spacing dxyz into chunks
+    # of at most chunksizes cells, as a list of level 0 GridSpec
+    dims = np.round((bbox[:, 1] - bbox[:, 0]) / dxyz).astype(int)
+    chnkinfo = ChunkInfo(tuple(dims), chunksizes)
+    ndim = len(dims)
+    starts_mesh = np.meshgrid(*chnkinfo.si, indexing="ij")
+    ends_mesh = np.meshgrid(*chnkinfo.ei, indexing="ij")
+    starts = np.column_stack([s.ravel() for s in starts_mesh])
+    ends = np.column_stack([e.ravel() for e in ends_mesh])
+
+    grids = []
+    for igrid in range(starts.shape[0]):
+        si = starts[igrid]
+        ei = ends[igrid]
+        grids.append(
+            GridSpec(
+                left_edge=bbox[:, 0] + si * dxyz,
+                right_edge=bbox[:, 0] + ei * dxyz,
+                dimensions=(ei - si).astype(int),
+                level=0,
+            )
+        )
+    assert len(grids) == chnkinfo.n_tots
+    assert ndim == grids[0].left_edge.size
+    return grids
+
+
+def _required_levels_1d(
+    widths: npt.NDArray[np.float64], dx0: float, refine_by: int, max_level: int
+) -> npt.NDArray[np.int64]:
+    # the refinement level required to resolve each source cell width, given
+    # a level 0 spacing of dx0: the smallest L with dx0 / refine_by**L <= width
+    tol = 1e-8
+    if refine_by == 1:
+        return np.zeros(widths.shape, dtype=np.int64)
+    ratio = dx0 / widths
+    levels = np.ceil(np.log(ratio) / np.log(refine_by) - tol)
+    levels = np.clip(levels, 0, max_level)
+    result: npt.NDArray[np.int64] = levels.astype(np.int64)
+    return result
+
+
+def _merge_intervals(
+    intervals: npt.NDArray[np.int64],
+) -> npt.NDArray[np.int64]:
+    # merge overlapping or adjacent integer intervals. intervals is an (n, 2) array
+    if intervals.shape[0] == 0:
+        return intervals.reshape((0, 2))
+    order = np.argsort(intervals[:, 0])
+    intervals = intervals[order]
+    merged = [intervals[0].copy()]
+    for lo, hi in intervals[1:]:
+        if lo <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append(np.array([lo, hi]))
+    return np.array(merged)
+
+
+def _needed_intervals_1d(
+    coord_vals: npt.NDArray[np.float64],
+    left_edge: float,
+    n0: int,
+    dx0: float,
+    refine_by: int,
+    max_level: int,
+) -> List[npt.NDArray[np.int64]]:
+    # for a single dimension, find the index intervals (in units of the finest
+    # level's cells) that need refinement at each level. Returns a list with
+    # an (n, 2) array for each level from 0 to max_level (level 0 is always
+    # the full domain).
+
+    widths = coord_vals[1:] - coord_vals[:-1]
+    req_levels = _required_levels_1d(widths, dx0, refine_by, max_level)
+
+    n_finest = n0 * refine_by**max_level
+    needed = [np.array([[0, n_finest]], dtype=np.int64)]
+    eps = 1e-6
+    for level in range(1, max_level + 1):
+        # source cells needing this level or finer
+        msk = req_levels >= level
+        if not np.any(msk):
+            needed.append(np.zeros((0, 2), dtype=np.int64))
+            continue
+        starts = coord_vals[:-1][msk]
+        ends = coord_vals[1:][msk]
+
+        # snap outward to level-1 cell boundaries, in level-1 index units
+        dx_parent = dx0 / refine_by ** (level - 1)
+        n_parent = n0 * refine_by ** (level - 1)
+        i0 = np.floor((starts - left_edge) / dx_parent + eps)
+        i1 = np.ceil((ends - left_edge) / dx_parent - eps)
+        i0 = np.clip(i0, 0, n_parent).astype(np.int64)
+        i1 = np.clip(i1, 0, n_parent).astype(np.int64)
+        keep = i1 > i0
+        intervals = np.column_stack([i0[keep], i1[keep]])
+        # convert to finest-level units
+        intervals = intervals * refine_by ** (max_level - level + 1)
+        needed.append(_merge_intervals(intervals))
+    return needed
+
+
+def _partition_1d(
+    needed: List[npt.NDArray[np.int64]], level: int
+) -> npt.NDArray[np.int64]:
+    # breakpoints for the partition of a dimension at a given level: the union
+    # of all interval endpoints for levels <= level.
+    pts = [needed[0].ravel()]
+    for lev in range(1, level + 1):
+        pts.append(needed[lev].ravel())
+    return np.unique(np.concatenate(pts))
+
+
+def _interval_is_needed(
+    lo: int, hi: int, needed_at_level: npt.NDArray[np.int64]
+) -> bool:
+    # partition intervals never straddle a needed-interval endpoint, so a
+    # midpoint check is exact
+    mid = (lo + hi) / 2.0
+    return bool(np.any((needed_at_level[:, 0] <= mid) & (mid <= needed_at_level[:, 1])))
+
+
+def _merge_boxes_along_dim(
+    boxes: List[_Box],
+    idim: int,
+    parent_breakpoints: npt.NDArray[np.int64],
+) -> List[_Box]:
+    # greedily merge boxes adjacent along idim when they share all other
+    # extents and the shared face is not a parent-level breakpoint (so the
+    # merged box still sits within a single parent grid).
+    parent_set = set(parent_breakpoints.tolist())
+    groups: dict[tuple[int, ...], list[_Box]] = {}
+    for lo, hi in boxes:
+        key = tuple(np.delete(lo, idim).tolist() + np.delete(hi, idim).tolist())
+        groups.setdefault(key, []).append((lo, hi))
+
+    merged = []
+    for group in groups.values():
+        group.sort(key=lambda b: b[0][idim])
+        current_lo, current_hi = group[0]
+        for lo, hi in group[1:]:
+            adjacent = lo[idim] == current_hi[idim]
+            if adjacent and int(lo[idim]) not in parent_set:
+                current_hi = current_hi.copy()
+                current_hi[idim] = hi[idim]
+            else:
+                merged.append((current_lo, current_hi))
+                current_lo, current_hi = lo, hi
+        merged.append((current_lo, current_hi))
+    return merged
+
+
+def _auto_max_level(
+    coord_arrays: List[npt.NDArray[np.float64]],
+    cell_spacing: npt.NDArray[np.float64],
+    refine_by: npt.NDArray[np.int64],
+) -> int:
+    max_level = 0
+    for idim, cvals in enumerate(coord_arrays):
+        if refine_by[idim] == 1:
+            continue
+        min_w = np.min(cvals[1:] - cvals[:-1])
+        levels = _required_levels_1d(
+            np.array([min_w]), cell_spacing[idim], int(refine_by[idim]), 1000
+        )
+        max_level = max(max_level, int(levels[0]))
+    return max_level
+
+
+def plan_stretched_grid_refinement(
+    coord_arrays: List[npt.NDArray[np.float64]],
+    bbox: npt.NDArray[np.float64],
+    cell_spacing: npt.NDArray[np.float64],
+    refine_by: Union[int, ArrayLike] = 2,
+    max_level: int | None = None,
+    merge_grids: bool = True,
+) -> List[GridSpec]:
+    """
+    Plan an AMR hierarchy of uniform grids that resolves a stretched grid,
+    based only on the stretched grid's coordinate spacing.
+
+    Parameters
+    ----------
+    coord_arrays: list of 1d arrays
+        the monotonically increasing coordinate values of the stretched grid,
+        one array per dimension.
+    bbox: np.ndarray
+        the (ndim, 2) bounding box of the level 0 grid. The width in each
+        dimension must be an integer multiple of cell_spacing.
+    cell_spacing: np.ndarray
+        the level 0 cell spacing in each dimension.
+    refine_by: int or sequence of int
+        the refinement factor per level, either a single integer or one per
+        dimension. A dimension with a factor of 1 is never refined.
+    max_level: int
+        the maximum refinement level. If None, the hierarchy is as deep as
+        needed to resolve the smallest spacing of the stretched grid in every
+        dimension with a refinement factor greater than 1.
+    merge_grids: bool
+        if True (default), adjacent grids are merged where possible.
+
+    Returns
+    -------
+    list of GridSpec
+        the grid patches, level 0 first. Every grid above level 0 is fully
+        contained within a single grid of the level below.
+
+    """
+
+    ndim = len(coord_arrays)
+    bbox = np.asarray(bbox, dtype=np.float64)
+    cell_spacing = np.asarray(cell_spacing, dtype=np.float64)
+    rb = _validate_refine_by(refine_by, ndim)
+
+    n0 = np.round((bbox[:, 1] - bbox[:, 0]) / cell_spacing).astype(int)
+    if not np.allclose(bbox[:, 0] + n0 * cell_spacing, bbox[:, 1]):
+        raise ValueError(
+            "The bbox width must be an integer multiple of cell_spacing in each "
+            "dimension."
+        )
+
+    if max_level is None:
+        max_level = _auto_max_level(coord_arrays, cell_spacing, rb)
+    if max_level < 0:
+        raise ValueError(f"max_level must be >= 0, found {max_level}")
+
+    for idim in range(ndim):
+        if rb[idim] == 1:
+            min_w = np.min(coord_arrays[idim][1:] - coord_arrays[idim][:-1])
+            if cell_spacing[idim] > min_w * (1 + 1e-8):
+                ytxr_log.warning(
+                    f"Dimension {idim} has refine_by of 1 but the cell spacing "
+                    f"({cell_spacing[idim]}) is larger than the smallest source "
+                    f"spacing ({min_w}): the source grid will be under-resolved."
+                )
+
+    # finest-level cell counts and the 1d needed intervals per dimension
+    needed = []
+    for idim in range(ndim):
+        needed.append(
+            _needed_intervals_1d(
+                coord_arrays[idim],
+                bbox[idim, 0],
+                int(n0[idim]),
+                cell_spacing[idim],
+                int(rb[idim]),
+                max_level,
+            )
+        )
+
+    # the size of a cell at each level in finest-level units, by dimension
+    def _cells_per_level_cell(level: int) -> npt.NDArray[np.int64]:
+        result: npt.NDArray[np.int64] = rb ** (max_level - level)
+        return result
+
+    dx_finest = cell_spacing / _cells_per_level_cell(0)
+
+    grids = [
+        GridSpec(
+            left_edge=bbox[:, 0].copy(),
+            right_edge=bbox[:, 1].copy(),
+            dimensions=n0.astype(np.int64),
+            level=0,
+        )
+    ]
+
+    for level in range(1, max_level + 1):
+        partitions = [_partition_1d(needed[idim], level) for idim in range(ndim)]
+        intervals_1d = [
+            np.column_stack([p[:-1], p[1:]]) for p in partitions
+        ]  # (n_int, 2) per dim
+        needed_flags = [
+            np.array(
+                [
+                    _interval_is_needed(lo, hi, needed[idim][level])
+                    for lo, hi in intervals_1d[idim]
+                ],
+                dtype=bool,
+            )
+            for idim in range(ndim)
+        ]
+
+        # cartesian product of the per-dimension intervals
+        index_grids = np.meshgrid(
+            *[np.arange(len(iv)) for iv in intervals_1d], indexing="ij"
+        )
+        index_combos = np.column_stack([ig.ravel() for ig in index_grids])
+
+        boxes: List[_Box] = []
+        for combo in index_combos:
+            is_needed = any(needed_flags[idim][combo[idim]] for idim in range(ndim))
+            if not is_needed:
+                continue
+            lo = np.array([intervals_1d[idim][combo[idim], 0] for idim in range(ndim)])
+            hi = np.array([intervals_1d[idim][combo[idim], 1] for idim in range(ndim)])
+            boxes.append((lo, hi))
+
+        if merge_grids:
+            for idim in range(ndim):
+                parent_pts = _partition_1d(needed[idim], level - 1)
+                boxes = _merge_boxes_along_dim(boxes, idim, parent_pts)
+
+        cell_size = _cells_per_level_cell(level)
+        for lo, hi in boxes:
+            dims = (hi - lo) // cell_size
+            assert np.all(dims * cell_size == hi - lo)
+            grids.append(
+                GridSpec(
+                    left_edge=bbox[:, 0] + lo * dx_finest,
+                    right_edge=bbox[:, 0] + hi * dx_finest,
+                    dimensions=dims.astype(np.int64),
+                    level=level,
+                )
+            )
+
+    return grids
+
+
+def summarize_grid_plan(grids: List[GridSpec]) -> dict[int, dict[str, int]]:
+    """
+    Count the grids and cells at each level of a grid plan.
+
+    Returns
+    -------
+    dict
+        keyed by level, with "n_grids" and "n_cells" entries.
+    """
+    summary: dict[int, dict[str, int]] = {}
+    for grid in grids:
+        entry = summary.setdefault(grid.level, {"n_grids": 0, "n_cells": 0})
+        entry["n_grids"] += 1
+        entry["n_cells"] += grid.n_cells
+    return summary

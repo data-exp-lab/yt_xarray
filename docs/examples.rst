@@ -14,6 +14,7 @@ Example Notebooks
     examples/example_008_interpolation_with_refinement
     examples/example_009_custom_transformations
     examples/example_010_custom_interpolations
+    examples/example_011_stretched_grids_as_uniform
 
 These notebooks demonstrate `yt_xarray` usage:
 
@@ -27,3 +28,4 @@ These notebooks demonstrate `yt_xarray` usage:
 - Example 008: :doc:`examples/example_008_interpolation_with_refinement`
 - Example 009: :doc:`examples/example_009_custom_transformations`
 - Example 010: :doc:`examples/example_010_custom_interpolations`
+- Example 011: :doc:`examples/example_011_stretched_grids_as_uniform`
