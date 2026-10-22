@@ -1,6 +1,7 @@
 import importlib
 import os.path
 from os import PathLike
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -30,7 +31,7 @@ class _DimConstructor:
         return self.dim_n // 2
 
     @property
-    def values(self) -> npt.NDArray:
+    def values(self) -> npt.NDArray[Any]:
         dim_vals = np.linspace(self.dim_min, self.dim_max, self.dim_n)
         if self.stretched:
             dx = dim_vals[1:] - dim_vals[:-1]
@@ -165,7 +166,7 @@ def construct_minimal_ds(
     return xr.Dataset(data_vars=data_vars, attrs=other_atts)
 
 
-def _test_time_coord(nt: int = 5) -> npt.NDArray:
+def _test_time_coord(nt: int = 5) -> npt.NDArray[Any]:
     t0 = np.datetime64("2001-01-02").astype("datetime64[ns]")
     dt = np.timedelta64(1, "D")
     tvals = [t0]
@@ -246,7 +247,7 @@ def _find_file(file: PathLike[str] | str) -> PathLike[str] | str:
     if os.path.isfile(file):
         return file
 
-    ddir = yt.config.ytcfg.get("yt", "test_data_dir")
+    ddir = yt.config.ytcfg.get("yt", "test_data_dir")  # type: ignore[no-untyped-call]
     default_val = yt.config.ytcfg_defaults["yt"]["test_data_dir"]
     if ddir != default_val:
         possible_file = os.path.join(ddir, file)

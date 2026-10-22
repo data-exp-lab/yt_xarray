@@ -53,10 +53,10 @@ def test_grid_bounds_plot():
         gb.plot(ax)
 
     with pytest.raises(RuntimeError, match="le is undefined."):
-        _gd.GridBounds((0, np.nan), (1, 1))
+        _gd.GridBounds((0, np.nan), (1, 1))  # type: ignore[arg-type]
 
     with pytest.raises(RuntimeError, match="re is undefined."):
-        _gd.GridBounds((0, 0), (1, np.nan))
+        _gd.GridBounds((0, 0), (1, np.nan))  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("decomp_method", ("bisect", "signature"))

@@ -5,7 +5,6 @@ import xarray as xr
 import yt
 from numpy import typing as npt
 from numpy.typing import ArrayLike, NDArray
-from unyt import unyt_quantity
 from yt.data_objects.static_output import Dataset as ytDataset
 
 from yt_xarray.accessor import _xr_to_yt
@@ -26,7 +25,7 @@ from yt_xarray.utilities._grid_decomposition import (
 from yt_xarray.utilities.logging import ytxr_log
 
 
-@xr.register_dataset_accessor("yt")
+@xr.register_dataset_accessor("yt")  # type: ignore[no-untyped-call]
 class YtAccessor:
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
@@ -173,14 +172,7 @@ class YtAccessor:
 
         geom = (geometry, axis_order)
 
-        simtime = sel_info.selected_time
-        if isinstance(sel_info.selected_time, np.datetime64):
-            # float(simtime) will be nanoseconds before/after 1970-01-01
-            # would be nice to have yt ingest a np datetime, especially cause
-            # this will be converted to a float, so the roundtrip will not
-            # match exactly.
-            simtime = unyt_quantity(int(simtime), "ns")
-        kwargs.update({"sim_time": simtime})
+        kwargs.update({"sim_time": sel_info.selected_time})
 
         return fields, sel_info, geom, length_unit, kwargs
 
@@ -458,7 +450,7 @@ class YtAccessor:
         field: str,
         sel_dict: dict[str, Any] | None = None,
         sel_dict_type: str = "isel",
-    ) -> NDArray:
+    ) -> NDArray[Any]:
         """
         return the bounding box array for a field, with possible selections
 
@@ -601,7 +593,7 @@ class YtAccessor:
         pp_y_field = ("stream", y_field)
         pp_zfields = [("stream", z_f) for z_f in z_fields]
 
-        return yt.PhasePlot(
+        return yt.PhasePlot(  # type: ignore[no-untyped-call]
             ds,
             pp_x_field,
             pp_y_field,
@@ -686,7 +678,7 @@ class YtAccessor:
         ds = _get_default_ds(self._obj, fields_needed)
         ad = ds.all_data()
 
-        return yt.ProfilePlot(
+        return yt.ProfilePlot(  # type: ignore[no-untyped-call]
             ad,
             x_field,
             y_fields,
@@ -709,8 +701,8 @@ def _validate_chunksizes(
     chunksizes: Union[int, ArrayLike], ndims: int
 ) -> npt.NDArray[np.int64]:
     if np.ndim(chunksizes) == 0:
-        return np.array((int(chunksizes),) * ndims, dtype=int)
-    chunksizes_arr = np.asarray(chunksizes, dtype=int)
+        return np.full(ndims, chunksizes, dtype=np.int64)
+    chunksizes_arr = np.asarray(chunksizes, dtype=np.int64)
     if chunksizes_arr.size != ndims:
         raise ValueError(
             f"The number of elements in chunksizes {chunksizes_arr.size} "
@@ -798,7 +790,7 @@ def _validate_cell_spacing(
                 f"{sel_info.selected_coords}"
             )
     elif np.ndim(cell_spacing) == 0:
-        dxyz = np.full(ndims, float(cell_spacing), dtype=np.float64)
+        dxyz = np.full(ndims, cell_spacing, dtype=np.float64)
     else:
         dxyz = np.asarray(cell_spacing, dtype=np.float64)
         if dxyz.shape != (ndims,):
@@ -904,8 +896,9 @@ def _load_single_grid(
         g_dict["right_edge"] = np.append(g_dict["right_edge"], 0.5)
         g_dict["dimensions"] += (1,)
 
+    ds: ytDataset
     if sel_info.grid_type == _xr_to_yt._GridType.STRETCHED:
-        return yt.load_uniform_grid(
+        ds = yt.load_uniform_grid(
             data,
             data_shp,
             geometry=geom[0],
@@ -920,7 +913,7 @@ def _load_single_grid(
         grid_data = [
             data,
         ]
-        return yt.load_amr_grids(
+        ds = yt.load_amr_grids(
             grid_data,
             data_shp,
             geometry=geom[0],
@@ -929,6 +922,7 @@ def _load_single_grid(
             axis_order=geom[1],
             **kwargs,
         )
+    return ds
 
 
 def _load_chunked_grid(
@@ -1016,26 +1010,26 @@ def _load_chunked_grid(
 
     # these arrays are ordered by dimension. e.g., left_edges[0] will be the
     # all first dimension left edges
-    left_edges = np.meshgrid(*left_edges, indexing="ij")
-    right_edges = np.meshgrid(*right_edges, indexing="ij")
-    subgrid_sizes = np.meshgrid(*subgrid_sizes, indexing="ij")
-    subgrid_start = np.meshgrid(*subgrid_start, indexing="ij")
-    subgrid_end = np.meshgrid(*subgrid_end, indexing="ij")
+    le_mesh = np.meshgrid(*left_edges, indexing="ij")
+    re_mesh = np.meshgrid(*right_edges, indexing="ij")
+    sz_mesh = np.meshgrid(*subgrid_sizes, indexing="ij")
+    st_mesh = np.meshgrid(*subgrid_start, indexing="ij")
+    en_mesh = np.meshgrid(*subgrid_end, indexing="ij")
 
     # re-organize by grid number so that, e.g., the left_edges are the usual
     # left_edges (left_edges[0] is the min x, y, z of grid 0)
-    left_edges = np.column_stack([le.ravel() for le in left_edges])
-    right_edges = np.column_stack([re.ravel() for re in right_edges])
-    dimensions = np.column_stack([sz.ravel() for sz in subgrid_sizes])
-    subgrid_start = np.column_stack([sz.ravel() for sz in subgrid_start])
-    subgrid_end = np.column_stack([sz.ravel() for sz in subgrid_end])
+    grid_le = np.column_stack([le.ravel() for le in le_mesh])
+    grid_re = np.column_stack([re.ravel() for re in re_mesh])
+    grid_dims = np.column_stack([sz.ravel() for sz in sz_mesh])
+    grid_start = np.column_stack([sz.ravel() for sz in st_mesh])
+    grid_end = np.column_stack([sz.ravel() for sz in en_mesh])
 
     # now ready to build the list of grids
     if use_callable:
         reader = _get_xarray_reader(ds_xr, sel_info, interp_required=interp_required)
 
     grid_data = []
-    n_grids = len(left_edges)
+    n_grids = len(grid_le)
 
     if use_callable is False:
         full_field_vals = {}
@@ -1047,9 +1041,9 @@ def _load_chunked_grid(
 
     for igrid in range(n_grids):
         gdict = {
-            "left_edge": left_edges[igrid],
-            "right_edge": right_edges[igrid],
-            "dimensions": dimensions[igrid],
+            "left_edge": grid_le[igrid],
+            "right_edge": grid_re[igrid],
+            "dimensions": grid_dims[igrid],
             "level": 0,
         }
         for field in fields:
@@ -1057,15 +1051,15 @@ def _load_chunked_grid(
             if use_callable:
                 gdict[field] = (reader, units)
             else:
-                si = subgrid_start[igrid]
-                ei = subgrid_end[igrid]
+                si = grid_start[igrid]
+                ei = grid_end[igrid]
                 gridvals = full_field_vals[field][
                     si[0] : ei[0], si[1] : ei[1], si[2] : ei[2]
                 ]
                 gdict[field] = (gridvals, units)
         grid_data.append(gdict)
 
-    return yt.load_amr_grids(
+    ds: ytDataset = yt.load_amr_grids(
         grid_data,
         data_shp,
         geometry=geom[0],
@@ -1074,6 +1068,7 @@ def _load_chunked_grid(
         axis_order=geom[1],
         **kwargs,
     )
+    return ds
 
 
 def _get_default_ds(ds_xr: xr.Dataset, field):

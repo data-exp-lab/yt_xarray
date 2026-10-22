@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -39,7 +41,7 @@ def test_cartesian():
 
     slices = []
     for dsyt in [ds_yt_nochunk, ds_ch_no_call, ds_ch_call]:
-        slc = yt.SlicePlot(dsyt, "z", ("stream", "test_field_0"))
+        slc: Any = yt.SlicePlot(dsyt, "z", ("stream", "test_field_0"))
         slc.render()
         slices.append(slc.frb[("stream", "test_field_0")])
 

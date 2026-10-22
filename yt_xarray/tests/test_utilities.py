@@ -45,7 +45,7 @@ def test_file_validation(tmp_path):
     b = tdir / "test_file.txt"
     b.write_text("test test test")
 
-    yt.config.ytcfg.set("yt", "test_data_dir", str(tdir))
+    yt.config.ytcfg.set("yt", "test_data_dir", str(tdir))  # type: ignore[no-untyped-call]
 
     _ = _find_file("test_file.txt")
 
@@ -58,7 +58,7 @@ def test_open_dataset(tmp_path):
     ds.to_netcdf(tdir / "test_nc.nc")
     del ds
 
-    yt.config.ytcfg.set("yt", "test_data_dir", str(tdir))
+    yt.config.ytcfg.set("yt", "test_data_dir", str(tdir))  # type: ignore[no-untyped-call]
 
     ds = yt_xarray.open_dataset(tdir / "test_nc.nc")
     assert isinstance(ds, xr.Dataset)
