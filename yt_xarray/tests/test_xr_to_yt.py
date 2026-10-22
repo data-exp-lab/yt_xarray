@@ -6,7 +6,6 @@ import pytest
 import xarray as xr
 import yt
 from numpy import typing as npt
-from yt.data_objects.static_output import Dataset as ytDataset
 
 import yt_xarray.accessor._xr_to_yt as xr2yt
 from yt_xarray.utilities._utilities import (
@@ -43,7 +42,7 @@ def test_selection_aliases(coord):
     for othername in xr2yt._coord_aliases[coord]:
         kwargs = {c_m_ds_kwargs[coord]: othername}
         ds = construct_minimal_ds(**kwargs)  # type: ignore[arg-type]
-        fields = list(ds.data_vars)
+        fields = [str(v) for v in ds.data_vars]
         sel = xr2yt.Selection(ds, fields)
         assert np.all(sel.starting_indices == np.array((0, 0, 0)))
 
@@ -215,14 +214,17 @@ def test_time_reduction(coord_set):
         NotImplementedError,
         match="Loading data with time as a dimension is not currently",
     ):
-        _ = xr2yt.Selection(ds, list(ds.data_vars))
+        _ = xr2yt.Selection(ds, [str(v) for v in ds.data_vars])
 
-    sel = xr2yt.Selection(ds, list(ds.data_vars), sel_dict={"time": 0})
+    sel = xr2yt.Selection(ds, [str(v) for v in ds.data_vars], sel_dict={"time": 0})
     assert len(sel.selected_shape) == 3
 
     timetoselect = ds.time.isel({"time": 1}).values
     sel = xr2yt.Selection(
-        ds, list(ds.data_vars), sel_dict={"time": timetoselect}, sel_dict_type="sel"
+        ds,
+        [str(v) for v in ds.data_vars],
+        sel_dict={"time": timetoselect},
+        sel_dict_type="sel",
     )
     assert len(sel.selected_shape) == 3
 
@@ -230,9 +232,9 @@ def test_time_reduction(coord_set):
 def test_dimension_reduction():
     ds = construct_ds_with_extra_dim(0, dim_name="eta")
     with pytest.raises(ValueError, match="ndim is 4"):
-        _ = xr2yt.Selection(ds, list(ds.data_vars))
+        _ = xr2yt.Selection(ds, [str(v) for v in ds.data_vars])
 
-    sel = xr2yt.Selection(ds, list(ds.data_vars), sel_dict={"eta": 0})
+    sel = xr2yt.Selection(ds, [str(v) for v in ds.data_vars], sel_dict={"eta": 0})
     assert len(sel.selected_shape) == 3
 
 
@@ -307,7 +309,7 @@ def test_two_dimensional(use_callable):
     ad = yt_2d.all_data()
     assert ad[("stream", "precip")].size == n_cells_xy
 
-    slc = yt.SlicePlot(yt_2d, "z", ("stream", "precip"))
+    slc: Any = yt.SlicePlot(yt_2d, "z", ("stream", "precip"))
     slc.render()
 
     with pytest.raises(
@@ -458,7 +460,7 @@ def test_selection_interp_validation(geometry, stretched, interp_required):
         z_name=dim_names[2],
     )
 
-    fields = list(ds.data_vars)
+    fields = [str(v) for v in ds.data_vars]
 
     sel_info = xr2yt.Selection(
         ds,
@@ -487,9 +489,7 @@ def test_add_3rd_axis_name(yt_geom):
         _ = xr2yt._add_3rd_axis_name("bad_geometry", expected[:-1])
 
 
-def _get_pixelized_slice(
-    yt_ds: ytDataset,
-) -> tuple[Any, tuple[npt.NDArray, npt.NDArray | None] | npt.NDArray]:
+def _get_pixelized_slice(yt_ds: Any) -> tuple[Any, npt.NDArray[Any]]:
     slc = yt_ds.slice(
         yt_ds.coordinates.axis_id["depth"],
         yt_ds.domain_center[yt_ds.coordinates.axis_id["depth"]],
@@ -502,12 +502,12 @@ def _get_pixelized_slice(
         yt_ds.arr([1, 359, -89, 89], "code_length"),
         (400, 400),
     )
-    return slc, vals
+    return slc, np.asarray(vals)
 
 
 def _get_ds_for_reverse_tests(
     stretched: bool, use_callable: bool, chunksizes: tuple[int, ...]
-) -> ytDataset:
+) -> Any:
     ds = construct_minimal_ds(
         min_x=1,
         max_x=359,
@@ -624,5 +624,5 @@ def test_reader_with_2d_space_time_and_reverse_axis():
     ds_yt = ds.yt.load_grid(
         "test_case_3", sel_dict={"time": 0}, geometry="geographic", use_callable=True
     )
-    slc = yt.SlicePlot(ds_yt, "altitude", field)
+    slc: Any = yt.SlicePlot(ds_yt, "altitude", field)
     assert np.all(np.isfinite(slc.frb[field]))

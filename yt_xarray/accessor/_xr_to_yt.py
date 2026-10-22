@@ -46,16 +46,16 @@ class Selection:
 
         # all these attributes are set in _process_selection
         self.selected_shape: Tuple[int, ...]
-        self.full_bbox: npt.NDArray
-        self.selected_bbox: npt.NDArray
+        self.full_bbox: npt.NDArray[Any]
+        self.selected_bbox: npt.NDArray[Any]
         self.full_coords: Tuple[str, ...]
         self.selected_coords: Tuple[str, ...]
-        self.starting_indices: npt.NDArray
+        self.starting_indices: npt.NDArray[Any]
         self.selected_time: float
         self.ndims: int
         self.grid_type: _GridType
         self.cell_widths: list[Any]
-        self.global_dims: list[Any]
+        self.global_dims: npt.NDArray[Any]
         self.time_index_number: int | None = None
         self._process_selection(xr_ds)
 
@@ -88,10 +88,7 @@ class Selection:
                 # could add a validation here. but we wont ever be able to handle
                 # a case like [2,3,4, 8, 12, 13] in a yt dataset, doesnt make
                 # sense.
-                if _size_of_array_like(selector) > 1:
-                    si = selector[0]
-                else:
-                    si = selector
+                si = int(np.asarray(selector).ravel()[0])
             else:
                 raise RuntimeError(f"Unexpected sel_dict value: {coordname}:{selector}")
         elif self.sel_dict_type == "sel":
@@ -100,7 +97,7 @@ class Selection:
                 search_for = selector.start
             elif isinstance(selector, (float, np.datetime64, int)):
                 search_for = selector
-            elif isinstance(  # type: ignore[unreachable]
+            elif isinstance(
                 selector, (collections.abc.Sequence, np.ndarray, xr.DataArray)
             ):
                 if _size_of_array_like(selector) > 1:
@@ -114,13 +111,13 @@ class Selection:
                 raise RuntimeError(
                     f"Could not find selected value: {coordname}:{search_for}"
                 )
-            si = the_index[0]
+            si = int(the_index[0])
 
         return si
 
     def _process_selection(self, xr_ds: xr.Dataset):
         # the full list of coordinates (in order)
-        full_coords = list(xr_ds.data_vars[self.fields[0]].dims)
+        full_coords = [str(dim) for dim in xr_ds.data_vars[self.fields[0]].dims]
         time = 0.0
         # for each coordinate, apply any selector and then store min/max of the
         # coordinate. If the selector results in <= 1 in one of the dimensions,
@@ -192,7 +189,7 @@ class Selection:
                         grid_type = _GridType.STRETCHED
 
             elif coord_vals.size == 1 and is_time_dim:
-                time = coord_vals
+                time = float(coord_vals.ravel()[0])
 
         if len(n_edges) > 3:
             raise ValueError(
@@ -256,7 +253,7 @@ class Selection:
         dim_list = list(xr_ds.data_vars[fields[0]].dims)
         coord_shape = np.array([getattr(xr_ds, dim).size for dim in dim_list])
         field_shape = np.array(shape)
-        if np.all(coord_shape == field_shape) is False:
+        if not np.all(coord_shape == field_shape):
             raise RuntimeError(
                 "coordinate dimensions do not match field " "dimensions."
             )
@@ -276,7 +273,7 @@ class Selection:
 
     def interp_validation(
         self, geometry: str
-    ) -> tuple[bool, tuple[int, ...], npt.NDArray]:
+    ) -> tuple[bool, tuple[int, ...], npt.NDArray[Any]]:
         # checks if yt will need to interpolate to cell center
         # returns a tuple of (bool, shape, bbox). If the bool is True then
         # interpolation is required.
@@ -467,10 +464,7 @@ def _add_3rd_axis_name(yt_geometry: str, axis_order: list[str]) -> list[str]:
 
 
 def _size_of_array_like(v: npt.ArrayLike) -> int:
-    if isinstance(v, (np.ndarray, xr.DataArray)):
-        return int(v.size)
-
-    return len(v)
+    return int(np.size(v))
 
 
 def _validate_geometry(possible_geom: str) -> str:
@@ -485,7 +479,7 @@ class _GridType(enum.Flag):
     UNKNOWN = enum.auto()
 
 
-def _check_grid_stretchiness(x: npt.NDArray) -> _GridType:
+def _check_grid_stretchiness(x: npt.NDArray[Any]) -> _GridType:
     dx = np.unique(x[1:] - x[:-1])
     grid_tol = 1e-10  # could be a user setting
     if np.allclose(dx, [dx[0]], grid_tol):
@@ -494,8 +488,8 @@ def _check_grid_stretchiness(x: npt.NDArray) -> _GridType:
         return _GridType.STRETCHED
 
 
-def _check_for_time(dim_name, dim_vals: npt.NDArray) -> bool:
-    return "time" in dim_name.lower() or type(dim_vals) is np.datetime64
+def _check_for_time(dim_name: str, dim_vals: npt.NDArray[Any] | np.datetime64) -> bool:
+    return "time" in dim_name.lower() or isinstance(dim_vals, np.datetime64)
 
 
 def _interpolate_to_cell_centers(data: xr.DataArray):
@@ -511,12 +505,12 @@ def _interpolate_to_cell_centers(data: xr.DataArray):
 def _load_full_field_from_xr(
     ds_xr, field: str, sel_info: Selection, interp_required: bool = False
 ):
-    vals = sel_info.select_from_xr(ds_xr, field).load()
+    data = sel_info.select_from_xr(ds_xr, field).load()
 
     if interp_required:
-        vals = _interpolate_to_cell_centers(vals)
+        data = _interpolate_to_cell_centers(data)
 
-    vals = vals.values.astype(np.float64)
+    vals = data.values.astype(np.float64)
     if sel_info.ndims == 2:
         vals = np.expand_dims(vals, axis=-1)
     return vals

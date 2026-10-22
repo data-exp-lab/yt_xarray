@@ -14,14 +14,14 @@ if TYPE_CHECKING:
     import matplotlib.pyplot as plt
 
 
-def _dsig2_dpx2(sig1d: npt.NDArray) -> npt.NDArray:
+def _dsig2_dpx2(sig1d: npt.NDArray[Any]) -> npt.NDArray[Any]:
     dsig1_dpx1 = sig1d[1:] - sig1d[:-1]
     dsig2_dpx2 = np.zeros(sig1d.shape)
     dsig2_dpx2[1:-1] = dsig1_dpx1[1:] - dsig1_dpx1[:-1]
     return dsig2_dpx2
 
 
-def _lowpass_filter(sig_1d: npt.NDArray) -> npt.NDArray:
+def _lowpass_filter(sig_1d: npt.NDArray[Any]) -> npt.NDArray[Any]:
     # pass a signature array through a lowpass filter. should expose some of these
     # for when a grid is not properly decomposing...
     msg = "This functionality requires scipy. Install it and try again."
@@ -32,7 +32,7 @@ def _lowpass_filter(sig_1d: npt.NDArray) -> npt.NDArray:
     Wn = 0.1  # critical frequency [Hz]
     b, a = scp_signal.butter(order, Wn=Wn, fs=fs, btype="low", analog=False)
     y = scp_signal.filtfilt(b, a, sig_1d)
-    return y
+    return np.asarray(y)
 
 
 class GridBounds:
@@ -61,13 +61,12 @@ class GridBounds:
 
         width = self.size[1]
         height = self.size[0]
-        xy = list(self.le)
-        xy.reverse()
+        xy = (self.le[1], self.le[0])
         rect = Rectangle(xy, width, height, **kwargs)
         ax.add_patch(rect)
 
 
-def _find_max_change(f_d2_d2: npt.NDArray, f: npt.NDArray) -> int:
+def _find_max_change(f_d2_d2: npt.NDArray[Any], f: npt.NDArray[Any]) -> int:
     # find an index corresponding to the maximum change across 0
     # f_d2_d2 : second derivative of f
     # f: the function
@@ -88,9 +87,10 @@ def _find_max_change(f_d2_d2: npt.NDArray, f: npt.NDArray) -> int:
 _sig_axis_sum_order = {0: (1, -1), 1: (0, -1), 2: (0, 0)}
 
 
-def _signature_array(phi: npt.NDArray, dim: int) -> npt.NDArray:
+def _signature_array(phi: npt.NDArray[Any], dim: int) -> npt.NDArray[Any]:
     # calculate the signature array for an image mask for the
     # specified dimension
+    sig_array: npt.NDArray[Any]
     if phi.ndim == 2:
         axid = 1 - dim  # axis to sum over
         sig_array = np.sum(phi, axis=axid)
@@ -104,7 +104,7 @@ def _signature_array(phi: npt.NDArray, dim: int) -> npt.NDArray:
 
 
 def _find_grid_division_coord_1d(
-    grid: GridBounds, phi: npt.NDArray, dim: int
+    grid: GridBounds, phi: npt.NDArray[Any], dim: int
 ) -> int | None:
     # find the pixel index at which to split the grid for the present
     # dimension
@@ -124,7 +124,9 @@ def _find_grid_division_coord_1d(
     return coord
 
 
-def _find_grid_division_coord(phi: npt.NDArray, grid: GridBounds) -> tuple[int, ...]:
+def _find_grid_division_coord(
+    phi: npt.NDArray[Any], grid: GridBounds
+) -> tuple[int, ...]:
     phi_subset = _grid_subset(grid.le, grid.re, phi)
 
     grid_coords: list[int | None] = []
@@ -136,8 +138,8 @@ def _find_grid_division_coord(phi: npt.NDArray, grid: GridBounds) -> tuple[int, 
 
 
 def _grid_subset(
-    le: Tuple[int, ...], re: Tuple[int, ...], phi: npt.NDArray
-) -> npt.NDArray:
+    le: Tuple[int, ...], re: Tuple[int, ...], phi: npt.NDArray[Any]
+) -> npt.NDArray[Any]:
     nd = len(le)
     slcs = tuple([slice(le[idim], re[idim]) for idim in range(nd)])
     phivals = phi[slcs]
@@ -145,7 +147,7 @@ def _grid_subset(
 
 
 def _grid_filled_fraction(
-    le: Tuple[int, ...], re: Tuple[int, ...], phi: npt.NDArray
+    le: Tuple[int, ...], re: Tuple[int, ...], phi: npt.NDArray[Any]
 ) -> float:
     grid_vals = _grid_subset(le, re, phi)
     np_sum: float = np.sum(grid_vals)
@@ -154,14 +156,15 @@ def _grid_filled_fraction(
 
 
 def _grid_contains_points(
-    le: Tuple[int, ...], re: Tuple[int, ...], phi: npt.NDArray
+    le: Tuple[int, ...], re: Tuple[int, ...], phi: npt.NDArray[Any]
 ) -> bool:
     phi_subset = _grid_subset(le, re, phi)
-    contains: bool = np.any(phi_subset > 0)
-    return contains
+    return bool(np.any(phi_subset > 0))
 
 
-def _split_grid_at_coord(grid: GridBounds, coord, phi: npt.NDArray) -> List[GridBounds]:
+def _split_grid_at_coord(
+    grid: GridBounds, coord, phi: npt.NDArray[Any]
+) -> List[GridBounds]:
     new_grids = []
     le = grid.le
     re = grid.re
@@ -182,10 +185,10 @@ def _split_grid_at_coord(grid: GridBounds, coord, phi: npt.NDArray) -> List[Grid
         new_r_edges.append(idim_res)
 
     # build permutation of new edges
-    ixyz_le = np.meshgrid(*new_l_edges, indexing="ij")
-    ixyz_re = np.meshgrid(*new_r_edges, indexing="ij")
-    ixyz_le = np.column_stack([ixyz_le[idim].ravel() for idim in range(phi.ndim)])
-    ixyz_re = np.column_stack([ixyz_re[idim].ravel() for idim in range(phi.ndim)])
+    le_mesh = np.meshgrid(*new_l_edges, indexing="ij")
+    re_mesh = np.meshgrid(*new_r_edges, indexing="ij")
+    ixyz_le = np.column_stack([le_mesh[idim].ravel() for idim in range(phi.ndim)])
+    ixyz_re = np.column_stack([re_mesh[idim].ravel() for idim in range(phi.ndim)])
 
     # for each new grid, check if it contains nonzero image values then add
     # the new grid. The loop here isn't too bad, because the size of ixyz_le is
@@ -200,7 +203,7 @@ def _split_grid_at_coord(grid: GridBounds, coord, phi: npt.NDArray) -> List[Grid
 
 
 def decompose_image_mask_bisect(
-    phi: npt.NDArray,
+    phi: npt.NDArray[Any],
     max_iters: int = 100,
     ideal_grid_fill: float = 0.95,
     min_grid_size: int = 10,
@@ -246,7 +249,7 @@ def decompose_image_mask_bisect(
 
 
 def decompose_image_mask(
-    phi: npt.NDArray,
+    phi: npt.NDArray[Any],
     max_iters: int = 100,
     ideal_grid_fill: float = 0.9,
     min_grid_size: int = 10,
@@ -292,12 +295,12 @@ def decompose_image_mask(
 
 
 def _create_image_mask(
-    bbox_cart: npt.NDArray,
-    bbox_native: npt.NDArray,
-    res: Union[tuple[int, ...], npt.NDArray],
+    bbox_cart: npt.NDArray[Any],
+    bbox_native: npt.NDArray[Any],
+    res: Union[tuple[int, ...], npt.NDArray[Any]],
     tform: Transformer,
     chunks: Optional[int] = 100,
-) -> npt.NDArray:
+) -> npt.NDArray[Any]:
     emsg = (
         "This functionality requires dask[array], "
         "install it with `pip install dask[array]`"
@@ -317,19 +320,19 @@ def _create_image_mask(
     del xyz_1d
 
     # mark 1 if any cell corner falls in domain.
-    corner_masks = []
+    corner_masks: list[Any] = []
 
     def _get_corner_mask(
-        bbox_native: npt.NDArray,
+        bbox_native: npt.NDArray[Any],
         tform: Transformer,
-        xyz: Tuple[npt.NDArray, npt.NDArray, npt.NDArray],
-        wid: npt.NDArray,
+        xyz: Tuple[Any, Any, Any],
+        wid: npt.NDArray[Any],
         ix: float,
         iy: float,
         iz: float,
-    ) -> npt.NDArray:
+    ) -> Any:
         # check if an individual corner of a mesh element falls within the native
-        # bounding box.
+        # bounding box. xyz and the returned mask are dask arrays.
         #
         # bbox_native: bounding box array in native coordinates, in order expected
         #              by transform
@@ -363,13 +366,13 @@ def _create_image_mask(
     image_mask = corner_masks[0]
     for msk in corner_masks[1:]:
         image_mask = np.logical_or(image_mask, msk)
-    return image_mask.compute()
+    return np.asarray(image_mask.compute())
 
 
 def _get_yt_ds(
-    image_mask: npt.NDArray,
+    image_mask: npt.NDArray[Any],
     data_callables: dict[str, Callable[[Any], Any]],
-    bbox: npt.NDArray,
+    bbox: npt.NDArray[Any],
     max_iters=200,
     min_grid_size=10,
     refine_by=2,
@@ -434,7 +437,7 @@ def _get_yt_ds(
         image_mask.shape,
         geometry="cartesian",
         bbox=bbox,
-        axis_order="xyz",
+        axis_order=("x", "y", "z"),
         refine_by=refine_by,
         **load_kwargs,
     )
@@ -464,7 +467,7 @@ class ChunkInfo:
 
         self.chunksizes = chunksizes
         self.data_shape = np.asarray(data_shp).astype(np.int64)
-        self.n_chnk: npt.NDArray[np.int64] = (
+        self.n_chnk: npt.NDArray[np.float64] = (
             self.data_shape / chunksizes
         )  # may not be int
         self.n_whl_chnk = np.floor(self.n_chnk).astype(int)  # whole chunks in each dim
@@ -564,7 +567,7 @@ def _validate_refine_by(
 ) -> npt.NDArray[np.int64]:
     rb: npt.NDArray[np.int64]
     if np.ndim(refine_by) == 0:
-        rb = np.full(ndim, int(refine_by), dtype=np.int64)
+        rb = np.full(ndim, refine_by, dtype=np.int64)
     else:
         rb = np.asarray(refine_by, dtype=np.int64)
         if rb.shape != (ndim,):

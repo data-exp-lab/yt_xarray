@@ -135,7 +135,7 @@ def test_load_grid(ds_xr, use_callable):
 @pytest.mark.parametrize("coord_set", range(5))
 def test_time_reduction(coord_set, use_callable):
     ds = construct_ds_with_extra_dim(coord_set)
-    flds = list(ds.data_vars)
+    flds = [str(v) for v in ds.data_vars]
 
     with pytest.raises(
         NotImplementedError,
@@ -158,8 +158,9 @@ def test_time_reduction(coord_set, use_callable):
     )
     interpd, _, _ = sel.interp_validation(str(ds_yt.geometry))
     f_ = ds.data_vars[flds[0]].isel({"time": 0})
+    expected: int
     if interpd:
-        expected = np.prod([n - 1 for n in f_.shape])
+        expected = int(np.prod([n - 1 for n in f_.shape]))
     else:
         expected = f_.size
     assert len(f) == expected

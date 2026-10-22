@@ -1,13 +1,15 @@
 import os
 import os.path
+from typing import Any
 
 import pytest
-from yt.data_objects.static_output import Dataset as ytDataset
 
 from yt_xarray.sample_data import load_random_xr_data
 
 
-def get_xr_ds() -> ytDataset:
+def get_xr_ds() -> Any:
+    # returns an xr.Dataset, typed as Any because the .yt accessor is
+    # registered dynamically and not visible to static type checkers
     fields = {
         "temperature": ("x", "y", "z"),
         "pressure": ("x", "y", "z"),
