@@ -253,7 +253,7 @@ class Selection:
         dim_list = list(xr_ds.data_vars[fields[0]].dims)
         coord_shape = np.array([getattr(xr_ds, dim).size for dim in dim_list])
         field_shape = np.array(shape)
-        if np.all(coord_shape == field_shape) is False:
+        if not np.all(coord_shape == field_shape):
             raise RuntimeError(
                 "coordinate dimensions do not match field " "dimensions."
             )
