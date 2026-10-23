@@ -354,8 +354,7 @@ class GeocentricCartesian(Transformer):
         valid_radial_types = ("radius", "depth", "altitude")
         if radial_type not in valid_radial_types:
             msg = (
-                f"radial_type must be one of {valid_radial_types}, "
-                f"found {radial_type}."
+                f"radial_type must be one of {valid_radial_types}, found {radial_type}."
             )
             raise ValueError(msg)
         self.radial_type = radial_type

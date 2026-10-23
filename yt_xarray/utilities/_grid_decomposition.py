@@ -494,7 +494,6 @@ class ChunkInfo:
             ei_list = []
             size_list = []
             for idim in range(self.ndim):
-
                 # first get the starting and end points of whole chunks
                 si0 = self.starting_index_offset[idim]
                 si_0 = si0 + self.chunksizes[idim] * np.arange(self.n_whl_chnk[idim])
