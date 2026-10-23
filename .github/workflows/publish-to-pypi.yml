@@ -12,6 +12,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
+    - name: Check __version__ matches the tag
+      run: |
+        ver='${{ github.ref_name }}'
+        ver="${ver#v}"
+        pkg_ver=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' yt_xarray/__init__.py)
+        if [ "$pkg_ver" != "$ver" ]; then
+          echo "Tag version $ver does not match yt_xarray.__version__ ($pkg_ver); fix __init__.py before tagging." >&2
+          exit 1
+        fi
+        echo "yt_xarray.__version__ == $ver"
     - name: Extract section for this version
       run: |
         ver='${{ github.ref_name }}'
