@@ -4,13 +4,37 @@ on:
     tags:
       - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
 
-name: Publish distributions to PyPI
+name: Publish distributions
 
 jobs:
-  build-and-publish:
-    name: Build and Publish
+  release-notes:
+    name: Extract release notes from HISTORY.md
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags')
+    steps:
+    - uses: actions/checkout@v7
+    - name: Extract section for this version
+      run: |
+        ver='${{ github.ref_name }}'
+        ver="${ver#v}"
+        awk -v ver="$ver" '
+          $0 ~ "^## " ver "( |$)" { found = 1; next }
+          found && /^## / { exit }
+          found { print }
+        ' HISTORY.md > notes.md
+        if [ ! -s notes.md ]; then
+          echo "No section for $ver found in HISTORY.md; finalize HISTORY.md before tagging." >&2
+          exit 1
+        fi
+        cat notes.md
+    - uses: actions/upload-artifact@v4
+      with:
+        name: release-notes
+        path: notes.md
+
+  build:
+    name: Build distributions
+    needs: release-notes
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
     - name: Set up Python 3.14
@@ -21,12 +45,51 @@ jobs:
       run: |
           python -m pip install --upgrade pip
           python -m pip install -U build twine
-    - name: Build and check source tarball
+    - name: Build sdist and wheel
       run: python -m build
     - name: Twine check
       run: twine check dist/*
+    - uses: actions/upload-artifact@v4
+      with:
+        name: dist
+        path: dist/
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: release-the-hounds
+    permissions:
+      id-token: write
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: dist
+        path: dist/
     - name: Publish distribution to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Draft GitHub release
+    needs: [build, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: dist
+        path: dist/
+    - uses: actions/download-artifact@v4
+      with:
+        name: release-notes
+    - name: Create draft release
       env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      run: twine upload dist/*
+        GH_TOKEN: ${{ github.token }}
+      run: >-
+        gh release create '${{ github.ref_name }}'
+        --repo '${{ github.repository }}'
+        --draft
+        --title 'Release ${{ github.ref_name }}'
+        --notes-file notes.md
+        dist/*
