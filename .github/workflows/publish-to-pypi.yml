@@ -7,8 +7,33 @@ on:
 name: Publish distributions
 
 jobs:
+  release-notes:
+    name: Extract release notes from HISTORY.md
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - name: Extract section for this version
+      run: |
+        ver='${{ github.ref_name }}'
+        ver="${ver#v}"
+        awk -v ver="$ver" '
+          $0 ~ "^## " ver "( |$)" { found = 1; next }
+          found && /^## / { exit }
+          found { print }
+        ' HISTORY.md > notes.md
+        if [ ! -s notes.md ]; then
+          echo "No section for $ver found in HISTORY.md; finalize HISTORY.md before tagging." >&2
+          exit 1
+        fi
+        cat notes.md
+    - uses: actions/upload-artifact@v4
+      with:
+        name: release-notes
+        path: notes.md
+
   build:
     name: Build distributions
+    needs: release-notes
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
@@ -51,24 +76,13 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v7
     - uses: actions/download-artifact@v4
       with:
         name: dist
         path: dist/
-    - name: Extract release notes from HISTORY.md
-      run: |
-        ver='${{ github.ref_name }}'
-        ver="${ver#v}"
-        awk -v ver="$ver" '
-          $0 ~ "^## " ver "( |$)" { found = 1; next }
-          found && /^## / { exit }
-          found { print }
-        ' HISTORY.md > notes.md
-        if [ ! -s notes.md ]; then
-          echo "No section for $ver found in HISTORY.md" >&2
-          exit 1
-        fi
+    - uses: actions/download-artifact@v4
+      with:
+        name: release-notes
     - name: Create draft release
       env:
         GH_TOKEN: ${{ github.token }}
