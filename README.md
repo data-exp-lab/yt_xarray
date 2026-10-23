@@ -4,6 +4,7 @@
 [![Python Version](https://img.shields.io/pypi/pyversions/yt_xarray.svg?color=green)](https://python.org)
 [![Tests](https://github.com/data-exp-lab/yt_xarray/actions/workflows/run-pytest-tests.yml/badge.svg)](https://github.com/data-exp-lab/yt_xarray/actions/workflows/run-pytest-tests.yml)
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/data-exp-lab/yt_xarray/main.svg)](https://results.pre-commit.ci/latest/github/data-exp-lab/yt_xarray/main)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15642350.svg)](https://doi.org/10.5281/zenodo.15642350)
 
 An interface between yt and xarray
 
