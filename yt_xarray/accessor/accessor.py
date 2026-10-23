@@ -182,7 +182,7 @@ class YtAccessor:
         geometry: str | None = None,
         bbox: Mapping[str, ArrayLike] | ArrayLike | None = None,
         cell_spacing: Mapping[str, float] | ArrayLike | float | None = None,
-        pin_bbox: bool = False,
+        pin_bbox: bool = True,
         use_callable: bool = True,
         sel_dict: dict[str, Any] | None = None,
         sel_dict_type: str = "isel",
@@ -217,9 +217,9 @@ class YtAccessor:
             the bounding box of the new grid in native coordinates. Either a
             dictionary mapping coordinate names to (min, max) pairs or an
             array of shape (ndim, 2) in the dimension order of the fields.
-            Defaults to the extent of the (selected) xarray data. If the
-            width in a dimension is not an integer multiple of the cell spacing,
-            the maximum is extended so that it is, unless pin_bbox is True.
+            Defaults to the extent of the (selected) xarray data. See pin_bbox
+            for how a width that is not an integer multiple of the cell
+            spacing is handled.
 
         cell_spacing : dict, ArrayLike or float
             the cell spacing of the new grid in native coordinates: a dictionary
@@ -233,12 +233,12 @@ class YtAccessor:
 
         pin_bbox : bool
             controls how a bbox width that is not an integer multiple of the
-            cell spacing is reconciled. If False (default), the bbox maximum is
-            extended to the next cell boundary and the cell spacing is kept.
-            If True, the bbox is kept exactly and the cell spacing is decreased
-            in that dimension to the largest value that divides the width into
-            an integer number of cells. With refine_grid, the adjusted spacing
-            is the level 0 spacing.
+            cell spacing is reconciled. If True (default), the bbox is kept
+            exactly and the cell spacing is decreased in that dimension to the
+            largest value that divides the width into an integer number of
+            cells. If False, the cell spacing is kept and the bbox maximum is
+            extended to the next cell boundary. With refine_grid, the adjusted
+            spacing is the level 0 spacing.
 
         use_callable : bool
             if True (default), then the yt dataset will interpolate on demand
@@ -817,7 +817,7 @@ def _validate_uniform_bbox(
     sel_info: _xr_to_yt.Selection,
     bbox: Mapping[str, ArrayLike] | ArrayLike | None,
     dxyz: npt.NDArray[np.float64],
-    pin_bbox: bool = False,
+    pin_bbox: bool = True,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     ndims = sel_info.ndims
     bbox_arr: npt.NDArray[np.float64]
