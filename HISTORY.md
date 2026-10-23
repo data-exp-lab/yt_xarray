@@ -1,13 +1,23 @@
 # History
 
-## 0.4.1dev 
+## 0.5.0
 
-### New Features 
-* new `ds.yt.load_as_uniform_grid` accessor method for interpolating stretched grids onto uniform grids (optionally a refined hierarchy of uniform grids) in native coordinates, with on-demand interpolation.
+Adds `load_as_uniform_grid` for interpolating stretched grids onto uniform grids, drops python 3.10, and modernizes the CI and release tooling.
+
+### New Features
+* new `ds.yt.load_as_uniform_grid` accessor method for interpolating stretched grids onto uniform grids (optionally a refined hierarchy of uniform grids) in native coordinates, with on-demand interpolation by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/154
+* add a `pin_bbox` setting to `load_as_uniform_grid`: by default the level 0 grid size is adjusted so the uniform grid does not overshoot the input bounding box, override with `pin_bbox=False` by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/156
 
 ### Changes
-* drop support for python 3.10: min python version is now 3.11
-* the mypy CI job now installs yt_xarray and its dependencies before type checking
+* drop support for python 3.10 (min python version is now 3.11), fix typing, and have the mypy CI job install yt_xarray and its dependencies before type checking by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/155
+* test python 3.13 and 3.14 by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/152
+* migrate pre-commit from black/isort/flake8 to ruff, remove unused Makefile by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/157
+* use PyPI trusted publishing, merge the release actions by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/158
+* move the old issue template by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/159
+* correct ndarray typing in docs by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/129
+* cleanup after v0.4.1 release by @chrishavlin in https://github.com/data-exp-lab/yt_xarray/pull/119
+
+**Full Changelog**: https://github.com/data-exp-lab/yt_xarray/compare/v0.4.1...v0.5.0
 
 ## 0.4.1
 
