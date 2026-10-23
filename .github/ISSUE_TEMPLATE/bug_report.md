@@ -1,3 +1,8 @@
+---
+name: Bug report
+about: Report a problem with yt_xarray
+---
+
 * yt_xarray version:
 * Python version:
 * Operating System:
