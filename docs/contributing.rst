@@ -62,15 +62,22 @@ Ready to contribute? Here's how to set up `yt_xarray` for local development.
     $ git clone git@github.com:your_name_here/yt_xarray.git
 
 
-3. Install your local copy into a virtualenv. Assuming you have virtualenvwrapper installed, this is how you set up your fork for local development::
+3. Install your local copy into a virtual environment. Using a plain `venv`
+   (any other environment manager works just as well)::
 
-    $ mkvirtualenv yt_xarray
     $ cd yt_xarray/
-    $ python -m pip install -e .
-    $ python -m pip install -r requirements_dev.txt
+    $ python -m venv .venv
+    $ source .venv/bin/activate
+    $ python -m pip install -e ".[full,test]"
 
-4. (optional) Setup pre-commit::
+   The `full` extra pulls in the optional runtime dependencies (netCDF4, scipy,
+   dask, cf_xarray) and `test` adds pytest and friends. To also run the type
+   checker locally, use ``".[typecheck]"`` instead, which includes both.
 
+4. (optional) Setup pre-commit. The hooks run `ruff check --fix` and
+   `ruff format`, the same checks that pre-commit.ci runs on pull requests::
+
+    $ python -m pip install pre-commit
     $ pre-commit install
 
 5. Create a branch for local development::
@@ -84,9 +91,15 @@ Now you can make your changes locally.
    tests::
 
 
-    $ pytest
+    $ pytest yt_xarray
 
-7. Commit your changes and push your branch to GitHub::
+7. (optional) Run the type checker. This requires the `typecheck` extra from
+   step 3 and is also run by CI on pull requests::
+
+
+    $ mypy yt_xarray
+
+8. Commit your changes and push your branch to GitHub::
 
 
     $ git add .
@@ -101,7 +114,7 @@ Now your branch is ready to push::
 
     $ git push origin name-of-your-bugfix-or-feature
 
-8. Submit a pull request through the GitHub website.
+9. Submit a pull request through the GitHub website.
 
 Pull Request Guidelines
 #######################
@@ -118,7 +131,8 @@ Tips
 
 To run a subset of tests::
 
-    $ pytest tests.test_yt_xarray
+    $ pytest yt_xarray/tests/test_accesor.py
+    $ pytest yt_xarray/tests/test_accesor.py::test_name
 
 
 Deploying
@@ -137,7 +151,7 @@ First, make sure that:
   any wheels if that section is missing or empty, so a leftover
   ``## 1.1.2dev`` heading will stop the release.
 
-Then, double check your `main` branch mactches upstream (assuming that `git remote -v` lists
+Then, double check your `main` branch matches upstream (assuming that `git remote -v` lists
 `git@github.com:data-exp-lab/yt_xarray.git` as the upstream repo)::
 
     $ git fetch --all
