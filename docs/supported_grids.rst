@@ -45,30 +45,11 @@ examples for a more detailed look.
 Resampled Uniform Grids
 #######################
 
-Some consumers of yt datasets, notably ``yt_idv``, require every grid to have a
-constant cell spacing in each dimension and so cannot work with stretched grids
-directly. For these cases, ``ds.yt.load_as_uniform_grid`` builds a new uniform
-grid with a user-specified bounding box and cell spacing and interpolates the
-xarray fields onto it on demand, as yt reads data. The interpolation happens in
-the native coordinates of the xarray dataset (e.g., depth, latitude, longitude),
-which is both cheaper and more faithful than transforming to cartesian coordinates
-first. The resampled grid may be chunked into multiple yt grids with the
-``chunksizes`` argument, exactly as for ``ds.yt.load_grid``.
-
-By default the cell spacing is the smallest spacing of the stretched grid in each
-dimension, so that every feature of the original grid is resolved. For grids where
-the fine spacing is confined to a small region, this can be wasteful, and
-``refine_grid=True`` instead builds a hierarchy of uniform grids: a coarse level 0
-grid covering the whole domain with finer grids only where the stretched grid
-spacing is finer than the current level's spacing. The hierarchy is planned from
-the coordinate values of the stretched grid alone, so no field data is read until
-yt requests it.
-
-Note that yt refines all dimensions together by ``refine_by``, so a region that
-is finely spaced in one dimension will also be refined in the others. For a grid
-that is stretched in only some dimensions, a per-dimension ``refine_by`` (e.g.,
-``refine_by=(2, 1, 1)`` to only ever refine the first dimension, or
-``refine_by={'x': 2, 'y': 1, 'z': 1}`` to specify it by coordinate name) avoids this. The
-loader logs the cell count of the planned hierarchy next to that of a uniform grid
-at the finest spacing, so it is easy to check whether refinement is worthwhile for
-a given dataset.
+Some consumers of yt datasets (e.g., ``yt_idv``) require a constant cell spacing
+within each grid and so cannot work with stretched grids directly. For these cases,
+``ds.yt.load_as_uniform_grid`` builds a new uniform grid with a specified bounding
+box and cell spacing and interpolates onto it on the fly, in the native coordinates
+of the xarray dataset. The new grid may be chunked into multiple yt grids or, with
+``refine_grid=True``, built as a hierarchy of grids refined only where the stretched
+grid spacing is fine. See :doc:`examples/example_011_stretched_grids_as_uniform`
+for details and the ``load_as_uniform_grid`` docstring for all options.
