@@ -234,3 +234,30 @@ def test_last_yt_cache(ds_xr):
     flds = "a_new_field_0"
     _ = ds_xr.yt.load_grid(flds)
     assert ds_xr.yt._yt_ds is not None
+
+
+def test_geospatial_vertical_units_on_geodetic():
+    # length unit should follow geospatial_vertical_units for lat/lon data,
+    # whether geometry is passed to load_grid or set beforehand.
+    def make_ds():
+        ds = xr.Dataset(
+            {"vs": (("depth", "latitude", "longitude"), np.random.rand(8, 7, 12))},
+            coords={
+                "depth": np.linspace(50.0, 2800.0, 8),
+                "latitude": np.linspace(10.0, 70.0, 7),
+                "longitude": np.linspace(-20.0, 90.0, 12),
+            },
+            attrs={"geospatial_vertical_units": "km"},
+        )
+        ds["depth"].attrs["units"] = "km"
+        return ds
+
+    ds = make_ds()
+    assert ds.yt.geometry == "geodetic"
+    yds = ds.yt.load_grid(geometry="internal_geographic")
+    assert np.isclose(yds.quan(1, "code_length").to("km").d, 1.0)
+
+    ds = make_ds()
+    ds.yt.set_geometry("internal_geographic")
+    yds = ds.yt.load_grid()
+    assert np.isclose(yds.quan(1, "code_length").to("km").d, 1.0)

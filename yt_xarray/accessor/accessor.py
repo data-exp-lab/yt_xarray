@@ -400,11 +400,11 @@ class YtAccessor:
         return ds_yt
 
     def _infer_length_unit(self) -> str | float | None:
-        if self.geometry == "geodetic":
-            return 1.0
-        elif hasattr(self._obj, "geospatial_vertical_units"):
+        if hasattr(self._obj, "geospatial_vertical_units"):
             # some netcdf conventions have this!
             return str(self._obj.geospatial_vertical_units)
+        if self.geometry == "geodetic":
+            return 1.0
         return None
 
     _geometry = None
