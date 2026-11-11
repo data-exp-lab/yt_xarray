@@ -1,8 +1,9 @@
 Contributing
 ============
 
-Contributions are welcome, and they are greatly appreciated! Every little bit
-helps, and credit will always be given.
+Contributions are welcome, especially from people who use yt_xarray in their
+own work. Before opening a pull request, please read the contribution policy in
+`CONTRIBUTING.md <https://github.com/data-exp-lab/yt_xarray/blob/main/CONTRIBUTING.md>`_.
 
 You can contribute in many ways:
 
@@ -23,14 +24,14 @@ If you are reporting a bug, please include:
 Fix Bugs
 ********
 
-Look through the GitHub issues for bugs. Anything tagged with "bug" and "help
-wanted" is open to whoever wants to implement it.
+Look through the GitHub issues for bugs. If you'd like to work on one, comment
+on the issue first.
 
 Implement Features
 ******************
 
-Look through the GitHub issues for features. Anything tagged with "enhancement"
-and "help wanted" is open to whoever wants to implement it.
+Look through the GitHub issues for features. If you'd like to work on one,
+comment on the issue first.
 
 Write Documentation
 *******************
